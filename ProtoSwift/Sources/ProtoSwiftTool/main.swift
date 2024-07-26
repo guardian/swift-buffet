@@ -1,9 +1,5 @@
 import Foundation
 
-func logMessage(_ message: String) {
-    print("\(Date()): \(message)")
-}
-
 func main() {
     if CommandLine.argc < 3 {
         print("Usage: ProtoSwiftTool <input.proto> <output.swift>")
@@ -19,7 +15,6 @@ func main() {
         let swiftCode = generateSwiftCode(from: messages, enums: enums)
         try swiftCode.write(to: outputURL, atomically: true, encoding: .utf8)
     } catch {
-        print("Error: \(error)")
         print("Failed to generate Swift code: \(error)")
         exit(1)
     }

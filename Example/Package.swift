@@ -15,11 +15,11 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "ExampleApp",
-            dependencies: [
-                .product(name: "ProtoSwift", package: "ProtoSwift")
-            ],
             resources: [
-                .copy("../proto/example.proto")
+                .process("example.proto")
+            ],
+            plugins: [
+                .plugin(name: "ProtoSwiftPlugin", package: "ProtoSwift"),
             ]
         )
     ]

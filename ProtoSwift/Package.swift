@@ -10,11 +10,11 @@ let package = Package(
         .watchOS(.v9)
     ],
     products: [
-        .plugin(name: "ProtoSwift", targets: ["ProtoSwift"]),
+        .plugin(name: "ProtoSwiftPlugin", targets: ["ProtoSwiftPlugin"]),
         .executable(name: "ProtoSwiftTool", targets: ["ProtoSwiftTool"]),
     ],
     targets: [
-        .plugin(name: "ProtoSwift", capability: .buildTool(), dependencies: ["ProtoSwiftTool"]),
-        .executableTarget(name: "ProtoSwiftTool", path: "Sources"),
+        .plugin(name: "ProtoSwiftPlugin", capability: .buildTool(), dependencies: ["ProtoSwiftTool"]),
+        .executableTarget(name: "ProtoSwiftTool"),
     ]
 )

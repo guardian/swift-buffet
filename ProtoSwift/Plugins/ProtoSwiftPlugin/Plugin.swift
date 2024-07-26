@@ -12,15 +12,15 @@ struct ProtoSwift: BuildToolPlugin {
         for sourceFile in sourceFiles {
             if sourceFile.path.extension == "proto" {
                 let outputPath = context.pluginWorkDirectory.appending("\(sourceFile.path.stem).swift")
-                let logPath = context.pluginWorkDirectory.appending("debug.log")
-                commands.append(.buildCommand(
-                    displayName: "Generating Swift code for \(sourceFile.path.lastComponent)",
-                    executable: try context.tool(named: "swift").path,
-                    arguments: ["run", "ProtoSwiftGenerator", sourceFile.path.string, outputPath.string, logPath.string],
-                    environment: [:],
-                    inputFiles: [sourceFile.path],
-                    outputFiles: [outputPath]
-                ))
+                commands.append(
+                    .buildCommand(
+                        displayName: "Generating Swift code for \(sourceFile.path.lastComponent)",
+                        executable: try context.tool(named: "ProtoSwiftTool").path,
+                        arguments: [sourceFile.path.string, outputPath.string],
+                        inputFiles: [sourceFile.path],
+                        outputFiles: [outputPath]
+                    )
+                )
             }
         }
 
@@ -38,12 +38,10 @@ extension ProtoSwift: XcodeBuildToolPlugin {
         for sourceFile in target.inputFiles {
             if sourceFile.path.extension == "proto" {
                 let outputPath = context.pluginWorkDirectory.appending("\(sourceFile.path.stem).swift")
-                let logPath = context.pluginWorkDirectory.appending("debug.log")
                 commands.append(.buildCommand(
                     displayName: "Generating Swift code for \(sourceFile.path.lastComponent)",
-                    executable: try context.tool(named: "swift").path,
-                    arguments: ["run", "ProtoSwiftGenerator", sourceFile.path.string, outputPath.string, logPath.string],
-                    environment: [:],
+                    executable: try context.tool(named: "ProtoSwiftTool").path,
+                    arguments: [sourceFile.path.string, outputPath.string],
                     inputFiles: [sourceFile.path],
                     outputFiles: [outputPath]
                 ))
