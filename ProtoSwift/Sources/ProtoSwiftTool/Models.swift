@@ -2,22 +2,39 @@ import Foundation
 
 struct ProtoMessage {
     let name: String
-    let fields: [ProtoField]
+    let fields: [ProtoField]  
+    let parentName: String?
+
+    var fullName: String {
+        if let parentName {
+            "\(parentName).\(name)"
+        } else {
+            name
+        }
+    }
 }
 
 struct ProtoField {
     let name: String
     let type: String
+    let coment: String?
     let isOptional: Bool
     let isRepeated: Bool
     let isMap: Bool
 
     var caseCorrectName: String {
         snakeToCamelCase(name)
+            .replacingOccurrences(of: "Url", with: "URL")
+            .replacingOccurrences(of: "Id", with: "ID")
+            .replacingOccurrences(of: "description", with: "description_p")
+    }
+
+    var caseCorrectedBaseType: String {
+        mapProtoTypeToSwift(type, isMap: isMap)
     }
 
     var caseCorrectedType: String {
-        let caseCorrectedType = mapProtoTypeToSwift(type, isMap: isMap)
+        let caseCorrectedType = caseCorrectedBaseType
         if isMap {
             // Handle map fields
             let mapTypes = type
@@ -35,11 +52,28 @@ struct ProtoField {
             return "\(caseCorrectedType)"
         }
     }
+
+    var isPrimitiveType: Bool {
+        if isMap { 
+            false
+        } else {
+            primitiveTypes.contains(type)
+        }
+    }
 }
 
 struct ProtoEnum {
     let name: String
     let cases: [ProtoEnumCase]
+    let parentName: String?
+
+    var fullName: String {
+        if let parentName {
+            "\(parentName).\(name)"
+        } else {
+            name
+        }
+    }
 }
 
 struct ProtoEnumCase {

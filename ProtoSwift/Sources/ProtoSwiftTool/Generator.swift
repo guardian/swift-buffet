@@ -20,13 +20,31 @@ fileprivate func write(_ enums: [ProtoEnum], to output: inout String) {
     }
     for protoEnum in enums.sorted(by: {$0.name < $1.name}) {
         let strippedCases = stripCommonPrefix(from: protoEnum.cases)
-        let pair = zip(strippedCases.map({$0.name}), protoEnum.cases.map({$0.name}))
-        output += "public enum \(protoEnum.name): String, Codable {\n"
+        let pair = zip(
+            strippedCases.map(\.name),
+            protoEnum.cases.map(\.value)
+        )
+        if let parent = protoEnum.parentName {
+            output += "extension Blueprint\(parent) {\n"
+        }
+        output += "public enum Blueprint\(protoEnum.name): Int, Codable {\n"
         for (caseName, caseValue) in pair {
-            output += "    case \(caseName) = \"\(caseValue)\"\n"
+            output += "    case \(caseName) = \(caseValue)\n"
+        }
+        writeEnumProtoInit(for: protoEnum, to: &output)
+        if let parent = protoEnum.parentName {
+            output += "}\n"
         }
         output += "}\n\n"
     }
+}
+
+fileprivate func writeEnumProtoInit(for protoEnum: ProtoEnum, to output: inout String) {
+//    output += "\n#if USE_PROTO\n"
+    output += "    init?(_ proto: Proto\(protoEnum.fullName)) {\n"
+    output += "        self.init(rawValue: proto.rawValue)\n"
+    output += "    }\n"
+//    output += "#endif\n"
 }
 
 @discardableResult
@@ -39,12 +57,12 @@ fileprivate func write(_ messages: [ProtoMessage], to output: inout String) -> B
     var needsTimeIntervalHelper = false
 
     for message in messages.sorted(by: {$0.name < $1.name}) {
-        output += "public struct \(message.name): Codable {\n"
+        output += "public struct Blueprint\(message.name): Codable {\n"
         
         let hasTimeInterval = addProperties(for: message, to: &output)
 
         addBasicInit(for: message, to: &output)
-        addProtoInit(for: message, to: &output)
+        writeMessageProtoInit(for: message, to: &output)
 
         if hasTimeInterval {
             writeDurationInit(for: message, to: &output)
@@ -61,7 +79,20 @@ fileprivate func write(_ messages: [ProtoMessage], to output: inout String) -> B
 fileprivate func addProperties(for message: ProtoMessage, to output: inout String) -> Bool {
     var hasTimeInterval = false
     for field in message.fields {
-        output += "    let \(field.caseCorrectName): \(field.caseCorrectedType)\n"
+        if let comment = field.coment {
+            output += "\n"
+            output += comment
+                .replacingOccurrences(of: "/**", with: "")
+                .replacingOccurrences(of: "*/", with: "")
+                .replacingOccurrences(of: "*", with: "")
+                .split(separator: "\n")
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { $0.isEmpty == false }
+                .map { String("    // \($0)") }
+                .joined(separator: "\n")
+            output += "\n"
+        }
+        output += "    public let \(field.caseCorrectName): \(field.caseCorrectedType)\n"
         if field.caseCorrectedType.contains("TimeInterval") {
             hasTimeInterval = true
         }
@@ -70,6 +101,17 @@ fileprivate func addProperties(for message: ProtoMessage, to output: inout Strin
 }
 
 fileprivate func addBasicInit(for message: ProtoMessage, to output: inout String) {
+
+    func addDefaultValue(for field: ProtoField, to output: inout String) {
+        if field.isOptional {
+            output += " = nil"
+        } else if field.isRepeated {
+            output += " = []"
+        } else if field.type == "bool" {
+            output += " = false"
+        }
+    }
+
     var fields = message.fields
 
     let first = fields.first
@@ -79,6 +121,7 @@ fileprivate func addBasicInit(for message: ProtoMessage, to output: inout String
 
     if let field = first {
         output += "\n    init(\(field.caseCorrectName): \(field.caseCorrectedType)"
+        addDefaultValue(for: field, to: &output)
     }
 
     if last == nil {
@@ -87,11 +130,15 @@ fileprivate func addBasicInit(for message: ProtoMessage, to output: inout String
         output += ",\n"
 
         for field in fields {
-            output += "         \(field.caseCorrectName): \(field.caseCorrectedType),\n"
+            output += "         \(field.caseCorrectName): \(field.caseCorrectedType)"
+            addDefaultValue(for: field, to: &output)
+            output += ",\n"
         }
 
         if let field = last {
-            output += "         \(field.caseCorrectName): \(field.caseCorrectedType)\n"
+            output += "         \(field.caseCorrectName): \(field.caseCorrectedType)"
+            addDefaultValue(for: field, to: &output)
+            output += "\n"
         }
 
         output += "    ) {\n"
@@ -104,22 +151,42 @@ fileprivate func addBasicInit(for message: ProtoMessage, to output: inout String
     output += "    }\n"
 }
 
-fileprivate func addProtoInit(for message: ProtoMessage, to output: inout String) {
-    output += "\n#if USE_PROTO\n"
+fileprivate func writeMessageProtoInit(for message: ProtoMessage, to output: inout String) {
+//    output += "\n#if USE_PROTO\n"
     output += "    init?(_ proto: Proto\(message.name)) {\n"
     for field in message.fields {
         // if types match
-        output += "        self.\(field.caseCorrectName) = proto.\(field.caseCorrectName)\n"
-        // TODO: handle cases that
+        if field.isPrimitiveType {
+            output += "        self.\(field.caseCorrectName) = proto.\(field.caseCorrectName)\n"
+        } else if field.isRepeated {
+            output += "        self.\(field.caseCorrectName) = proto.\(field.caseCorrectName).compactMap { \(field.caseCorrectedBaseType)($0) }\n"
+        } else if field.isMap {
+            output += "        self.\(field.caseCorrectName) = proto.\(field.caseCorrectName).reduce(into: \(field.caseCorrectedType.replacingOccurrences(of: "?", with: ""))()) { $0[$1.key] = $1.value }\n"
+        } else if field.isOptional == false {
+            output += "        self.\(field.caseCorrectName) = \(field.caseCorrectedBaseType)(proto.\(field.caseCorrectName))!\n"
+        } else if field.caseCorrectedBaseType == "TimeInterval" {
+            output += "        self.\(field.caseCorrectName) = proto.\(field.caseCorrectName).timeInterval\n"
+        } else if field.caseCorrectedBaseType == "Date" {
+            output += "        self.\(field.caseCorrectName) = proto.\(field.caseCorrectName).date\n"
+        } else {
+            output += "        self.\(field.caseCorrectName) = \(field.caseCorrectedBaseType)(proto.\(field.caseCorrectName))\n"
+        }
     }
     output += "    }\n"
-    output += "#endif\n"
+//    output += "#endif\n"
 }
 
 fileprivate func writeDurationInit(for message: ProtoMessage, to output: inout String) {
+
+    output += "\n    enum CodingKeys: String, CodingKey {\n"
+    for field in message.fields {
+        output += "        case \(field.caseCorrectName) = \"\(field.caseCorrectName)\"\n"
+    }
+    output += "    }\n"
+
     // Add custom initializer if the struct has a duration field
     output += "\n"
-    output += "    init(from decoder: Decoder) throws {\n"
+    output += "    public init(from decoder: Decoder) throws {\n"
     output += "        let container = try decoder.container(keyedBy: CodingKeys.self)\n"
 
     for field in message.fields {
@@ -135,7 +202,7 @@ fileprivate func writeDurationInit(for message: ProtoMessage, to output: inout S
     output += "    }\n"
 
     output += "\n"
-    output += "    func encode(to encoder: Encoder) throws {\n"
+    output += "    public func encode(to encoder: Encoder) throws {\n"
     output += "        var container = encoder.container(keyedBy: CodingKeys.self)\n"
 
     for field in message.fields {

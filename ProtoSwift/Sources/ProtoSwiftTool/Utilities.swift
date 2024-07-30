@@ -8,18 +8,36 @@ func mapProtoTypeToSwift(_ type: String, isMap: Bool = false) -> String {
     switch type {
     case "double": return "Double"
     case "float": return "Float"
-    case "int32", "sint32", "sfixed32": return "Int"
+    case "int32", "sint32", "sfixed32": return "Int32"
     case "int64", "sint64", "sfixed64": return "Int"
-    case "uint32", "fixed32": return "UInt"
+    case "uint32", "fixed32": return "UInt32"
     case "uint64", "fixed64": return "UInt"
     case "bool": return "Bool"
     case "string": return "String"
     case "bytes": return "Data"
     case "google.protobuf.Timestamp": return "Date"
     case "google.protobuf.Duration": return "TimeInterval"
-    default: return type // Handle nested messages and enums if needed
+    default: return "Blueprint\(type)" // Handle nested messages and enums if needed
     }
 }
+
+var primitiveTypes = [
+   "double",
+   "float",
+   "int32",
+   "sint32",
+   "sfixed32",
+   "int64",
+   "sint64",
+   "sfixed64",
+   "uint32",
+   "fixed32",
+   "uint64",
+   "fixed64",
+   "bool",
+   "string",
+   "bytes"
+]
 
 func snakeToCamelCase(_ string: String) -> String {
     let components = string.split(separator: "_")
