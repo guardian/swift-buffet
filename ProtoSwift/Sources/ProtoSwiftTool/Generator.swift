@@ -1,5 +1,11 @@
 import Foundation
 
+/// Generates Swift code from protocol buffer messages and enums.
+///
+/// - Parameters:
+///   - messages: An array of `ProtoMessage` representing protocol buffer messages.
+///   - enums: An array of `ProtoEnum` representing protocol buffer enums.
+/// - Returns: A string containing the generated Swift code.
 func generateSwiftCode(from messages: [ProtoMessage], enums: [ProtoEnum]) -> String {
     var output = "import Foundation\n\n"
 
@@ -13,12 +19,16 @@ func generateSwiftCode(from messages: [ProtoMessage], enums: [ProtoEnum]) -> Str
     return output
 }
 
+/// Writes the Swift code for protocol buffer enums.
+///
+/// - Parameters:
+///   - enums: An array of `ProtoEnum` to be written.
+///   - output: A mutable string where the generated code will be appended.
 fileprivate func write(_ enums: [ProtoEnum], to output: inout String) {
-    // Generate output for enums first to ensure they are available for use in messages
     if enums.isEmpty == false {
         output += "// MARK: - Enums\n"
     }
-    for protoEnum in enums.sorted(by: {$0.name < $1.name}) {
+    for protoEnum in enums.sorted(by: { $0.name < $1.name }) {
         let strippedCases = stripCommonPrefix(from: protoEnum.cases)
         let pair = zip(
             strippedCases.map(\.name),
@@ -39,26 +49,34 @@ fileprivate func write(_ enums: [ProtoEnum], to output: inout String) {
     }
 }
 
+/// Writes the initializer for a protocol buffer enum.
+///
+/// - Parameters:
+///   - protoEnum: The `ProtoEnum` to write the initializer for.
+///   - output: A mutable string where the generated code will be appended.
 fileprivate func writeEnumProtoInit(for protoEnum: ProtoEnum, to output: inout String) {
-//    output += "\n#if USE_PROTO\n"
     output += "    init?(_ proto: Proto\(protoEnum.fullName)) {\n"
     output += "        self.init(rawValue: proto.rawValue)\n"
     output += "    }\n"
-//    output += "#endif\n"
 }
 
+/// Writes the Swift code for protocol buffer messages.
+///
+/// - Parameters:
+///   - messages: An array of `ProtoMessage` to be written.
+///   - output: A mutable string where the generated code will be appended.
+/// - Returns: A boolean indicating whether a TimeInterval helper is needed.
 @discardableResult
 fileprivate func write(_ messages: [ProtoMessage], to output: inout String) -> Bool {
-    // Generate output for messages
     if messages.isEmpty == false {
         output += "// MARK: - Structs\n"
     }
-    
+
     var needsTimeIntervalHelper = false
 
-    for message in messages.sorted(by: {$0.name < $1.name}) {
+    for message in messages.sorted(by: { $0.name < $1.name }) {
         output += "public struct Blueprint\(message.name): Codable {\n"
-        
+
         let hasTimeInterval = addProperties(for: message, to: &output)
 
         addBasicInit(for: message, to: &output)
@@ -75,11 +93,17 @@ fileprivate func write(_ messages: [ProtoMessage], to output: inout String) -> B
     return needsTimeIntervalHelper
 }
 
+/// Adds properties to a message struct.
+///
+/// - Parameters:
+///   - message: The `ProtoMessage` to add properties for.
+///   - output: A mutable string where the generated code will be appended.
+/// - Returns: A boolean indicating whether the message has a TimeInterval property.
 @discardableResult
 fileprivate func addProperties(for message: ProtoMessage, to output: inout String) -> Bool {
     var hasTimeInterval = false
     for field in message.fields {
-        if let comment = field.coment {
+        if let comment = field.comment {
             output += "\n"
             output += comment
                 .replacingOccurrences(of: "/**", with: "")
@@ -87,7 +111,7 @@ fileprivate func addProperties(for message: ProtoMessage, to output: inout Strin
                 .replacingOccurrences(of: "*", with: "")
                 .split(separator: "\n")
                 .map { $0.trimmingCharacters(in: .whitespaces) }
-                .filter { $0.isEmpty == false }
+                .filter { !$0.isEmpty }
                 .map { String("    // \($0)") }
                 .joined(separator: "\n")
             output += "\n"
@@ -100,6 +124,11 @@ fileprivate func addProperties(for message: ProtoMessage, to output: inout Strin
     return hasTimeInterval
 }
 
+/// Adds a basic initializer to a message struct.
+///
+/// - Parameters:
+///   - message: The `ProtoMessage` to add the initializer for.
+///   - output: A mutable string where the generated code will be appended.
 fileprivate func addBasicInit(for message: ProtoMessage, to output: inout String) {
 
     func addDefaultValue(for field: ProtoField, to output: inout String) {
@@ -151,11 +180,14 @@ fileprivate func addBasicInit(for message: ProtoMessage, to output: inout String
     output += "    }\n"
 }
 
+/// Writes the initializer for a protocol buffer message.
+///
+/// - Parameters:
+///   - message: The `ProtoMessage` to write the initializer for.
+///   - output: A mutable string where the generated code will be appended.
 fileprivate func writeMessageProtoInit(for message: ProtoMessage, to output: inout String) {
-//    output += "\n#if USE_PROTO\n"
     output += "    init?(_ proto: Proto\(message.name)) {\n"
     for field in message.fields {
-        // if types match
         if field.isPrimitiveType {
             output += "        self.\(field.caseCorrectName) = proto.\(field.caseCorrectName)\n"
         } else if field.isRepeated {
@@ -173,18 +205,20 @@ fileprivate func writeMessageProtoInit(for message: ProtoMessage, to output: ino
         }
     }
     output += "    }\n"
-//    output += "#endif\n"
 }
 
+/// Writes the custom initializer and encoder for messages with TimeInterval fields.
+///
+/// - Parameters:
+///   - message: The `ProtoMessage` to write the custom initializer and encoder for.
+///   - output: A mutable string where the generated code will be appended.
 fileprivate func writeDurationInit(for message: ProtoMessage, to output: inout String) {
-
     output += "\n    enum CodingKeys: String, CodingKey {\n"
     for field in message.fields {
         output += "        case \(field.caseCorrectName) = \"\(field.caseCorrectName)\"\n"
     }
     output += "    }\n"
 
-    // Add custom initializer if the struct has a duration field
     output += "\n"
     output += "    public init(from decoder: Decoder) throws {\n"
     output += "        let container = try decoder.container(keyedBy: CodingKeys.self)\n"
@@ -218,7 +252,11 @@ fileprivate func writeDurationInit(for message: ProtoMessage, to output: inout S
     output += "    }\n"
 }
 
-
+/// Writes the TimeInterval helper extension if needed.
+///
+/// - Parameters:
+///   - messages: An array of `ProtoMessage` to check for TimeInterval fields.
+///   - output: A mutable string where the generated code will be appended.
 fileprivate func writeTimeIntervalHelper(_ messages: [ProtoMessage], to output: inout String) {
     if let fileContents = readFileContents(filename: "TimeInterval+String.swift") {
         output += "// MARK: - TimeInterval Extension\n"

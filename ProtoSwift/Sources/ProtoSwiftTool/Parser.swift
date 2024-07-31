@@ -1,76 +1,72 @@
 import Foundation
 
-// Assuming the regex patterns are defined in Regex.swift and imported correctly
+/// Parses a protocol buffer file from the given URL path.
+///
+/// - Parameter path: The URL of the .proto file to be parsed.
+/// - Returns: A tuple containing arrays of `ProtoMessage` and `ProtoEnum`.
+/// - Throws: An error if the file cannot be read.
 func parseProtoFile(at path: URL) throws -> ([ProtoMessage], [ProtoEnum]) {
     var content = try String(contentsOf: path)
     print("Starting parsing of messages")
     return parseContent(&content, parent: nil)
 }
 
-fileprivate func parseContent(_ content: inout String, parent: String?) -> ([ProtoMessage], [ProtoEnum]) {
+/// Recursively parses the content of a protocol buffer file.
+///
+/// - Parameters:
+///   - content: The content of the .proto file.
+///   - parent: The name of the parent message or enum, if any.
+/// - Returns: A tuple containing arrays of `ProtoMessage` and `ProtoEnum`.
+fileprivate func parseContent(
+    _ content: inout String,
+    parent: String?
+) -> ([ProtoMessage], [ProtoEnum]) {
 
     var localMessages: [ProtoMessage] = []
     var localEnums: [ProtoEnum] = []
 
-    // Use Swift's Regex for parsing
+    // Parsing messages
     let messageMatches = content.matches(of: messagePattern)
     for match in messageMatches {
+
         let messageName = String(match.1)
         var messageBody = String(match.2)
 
-        print("Matched message: \(messageName)")
-        print("Message body: \(messageBody)")
-
-        let (nestedMessages, nestedEnums) = parseContent(
+        // This will recessively call parse content on the
+        // body to find nested messages and enums
+        processMessage(
+            messageName,
             &messageBody,
-            parent: messageName
+            &localMessages,
+            &localEnums,
+            parent
         )
 
-        localMessages.append(contentsOf: nestedMessages)
-        localEnums.append(contentsOf: nestedEnums)
-
-        let fields = parseMessageFields(from: messageBody)
-
-        localMessages.append(
-            ProtoMessage(
-                name: messageName,
-                fields: fields,
-                parentName: parent
-            )
-        )
-
-        // remove the parsed content
+        // Remove the parsed content to avoid duplication
         content = content.replacingOccurrences(
             of: String(match.0),
             with: ""
         )
     }
 
+    // Parsing enums
     let enumMatches = content.matches(of: enumPattern)
     for match in enumMatches {
+
         let enumName = String(match.1)
         var enumBody = String(match.2)
-        print("Matched nested enum: \(enumName)")
-        print("Nested enum body: \(enumBody)")
 
-        let (nestedMessages, nestedEnums) = parseContent(
+        // This will recessively call parse content on the
+        // body to find nested messages and enums
+        processEnum(
+            enumName,
             &enumBody,
-            parent: enumName
+            &localMessages,
+            &localEnums,
+            parent
         )
 
-        localMessages.append(contentsOf: nestedMessages)
-        localEnums.append(contentsOf: nestedEnums)
-
-        let enumCases = parseEnumCases(from: enumBody)
-        localEnums.append(
-            ProtoEnum(
-                name: enumName,
-                cases: enumCases,
-                parentName: parent
-            )
-        )
-
-        // remove the parsed content
+        // Remove the parsed content to avoid duplication
         content = content.replacingOccurrences(
             of: String(match.0),
             with: ""
@@ -80,10 +76,82 @@ fileprivate func parseContent(_ content: inout String, parent: String?) -> ([Pro
     return (localMessages, localEnums)
 }
 
+/// Processes a protocol buffer enum by parsing its content and extracting nested messages and enums.
+///
+/// - Parameters:
+///   - name: The name of the enum.
+///   - body: The content of the enum.
+///   - localMessages: A mutable array to store parsed `ProtoMessage` objects.
+///   - localEnums: A mutable array to store parsed `ProtoEnum` objects.
+///   - parent: The name of the parent message or enum, if any.
+fileprivate func processEnum(
+    _ name: String,
+    _ body: inout String,
+    _ localMessages: inout [ProtoMessage],
+    _ localEnums: inout [ProtoEnum],
+    _ parent: String?
+) {
+    print("Matched nested enum: \(name)")
+    print("Nested enum body: \(body)")
+
+    let (nestedMessages, nestedEnums) = parseContent(&body, parent: name)
+
+    localMessages.append(contentsOf: nestedMessages)
+    localEnums.append(contentsOf: nestedEnums)
+
+    let cases = parseEnumCases(from: body)
+    localEnums.append(
+        ProtoEnum(
+            name: name,
+            cases: cases,
+            parentName: parent
+        )
+    )
+}
+
+/// Processes a protocol buffer message by parsing its content and extracting nested messages and enums.
+///
+/// - Parameters:
+///   - name: The name of the message.
+///   - body: The content of the message.
+///   - localMessages: A mutable array to store parsed `ProtoMessage` objects.
+///   - localEnums: A mutable array to store parsed `ProtoEnum` objects.
+///   - parent: The name of the parent message, if any.
+fileprivate func processMessage(
+    _ name: String,
+    _ body: inout String,
+    _ localMessages: inout [ProtoMessage],
+    _ localEnums: inout [ProtoEnum],
+    _ parent: String?
+) {
+    print("Matched message: \(name)")
+    print("Message body: \(body)")
+
+    let (nestedMessages, nestedEnums) = parseContent(&body, parent: name)
+
+    localMessages.append(contentsOf: nestedMessages)
+    localEnums.append(contentsOf: nestedEnums)
+
+    let fields = parseMessageFields(from: body)
+
+    localMessages.append(
+        ProtoMessage(
+            name: name,
+            fields: fields,
+            parentName: parent
+        )
+    )
+}
+
+
+/// Parses the fields of a protocol buffer message.
+///
+/// - Parameter content: The content of the message.
+/// - Returns: An array of `ProtoField` representing the fields of the message.
 fileprivate func parseMessageFields(from content: String) -> [ProtoField] {
     var fields: [ProtoField] = []
 
-    // Use Swift's Regex for parsing
+    // Use Swift's Regex for parsing fields
     let fieldMatches = content.matches(of: fieldPattern)
     print("Field matches count: \(fieldMatches.count)")
 
@@ -100,7 +168,7 @@ fileprivate func parseMessageFields(from content: String) -> [ProtoField] {
             ProtoField(
                 name: fieldName,
                 type: fieldType,
-                coment: comment,
+                comment: comment,
                 isOptional: isOptional,
                 isRepeated: isRepeated,
                 isMap: isMap
@@ -111,10 +179,14 @@ fileprivate func parseMessageFields(from content: String) -> [ProtoField] {
     return fields
 }
 
+/// Parses the cases of a protocol buffer enum.
+///
+/// - Parameter content: The content of the enum.
+/// - Returns: An array of `ProtoEnumCase` representing the cases of the enum.
 fileprivate func parseEnumCases(from content: String) -> [ProtoEnumCase] {
     var cases: [ProtoEnumCase] = []
 
-    // Use Swift's Regex for parsing
+    // Use Swift's Regex for parsing enum cases
     let caseMatches = content.matches(of: enumCasePattern)
     print("Enum case matches count: \(caseMatches.count)")
 

@@ -1,8 +1,13 @@
 import Foundation
 
+/// Maps a protocol buffer type to its corresponding Swift type.
+///
+/// - Parameters:
+///   - type: The protocol buffer type as a string.
+///   - isMap: A boolean indicating if the type is a map type. Defaults to `false`.
+/// - Returns: The corresponding Swift type as a string.
 func mapProtoTypeToSwift(_ type: String, isMap: Bool = false) -> String {
-    if isMap {
-        // Skip map types since they are handled separately
+    if isMap { // Skip map types since they are handled separately
         return type
     }
     switch type {
@@ -21,6 +26,7 @@ func mapProtoTypeToSwift(_ type: String, isMap: Bool = false) -> String {
     }
 }
 
+/// An array of primitive protocol buffer types.
 var primitiveTypes = [
    "double",
    "float",
@@ -39,6 +45,10 @@ var primitiveTypes = [
    "bytes"
 ]
 
+/// Converts a snake_case string to camelCase.
+///
+/// - Parameter string: The snake_case string to be converted.
+/// - Returns: The camelCase version of the input string.
 func snakeToCamelCase(_ string: String) -> String {
     let components = string.split(separator: "_")
     guard let first = components.first else {
@@ -51,6 +61,10 @@ func snakeToCamelCase(_ string: String) -> String {
         }
 }
 
+/// Strips the common prefix from a list of enum cases and converts them to camelCase.
+///
+/// - Parameter cases: An array of `ProtoEnumCase` to be processed.
+/// - Returns: An array of `ProtoEnumCase` with the common prefix removed and names converted to camelCase.
 func stripCommonPrefix(from cases: [ProtoEnumCase]) -> [ProtoEnumCase] {
     guard let prefix = findCommonPrefix(in: cases.map { $0.name }) else {
         return cases
@@ -66,6 +80,10 @@ func stripCommonPrefix(from cases: [ProtoEnumCase]) -> [ProtoEnumCase] {
     }
 }
 
+/// Finds the common prefix in an array of strings.
+///
+/// - Parameter strings: An array of strings to find the common prefix in.
+/// - Returns: The common prefix as a string, or `nil` if there is no common prefix.
 func findCommonPrefix(in strings: [String]) -> String? {
     guard var prefix = strings.first else {
         return nil
@@ -81,6 +99,12 @@ func findCommonPrefix(in strings: [String]) -> String? {
     return prefix
 }
 
+/// Reads the contents of a file.
+///
+/// - Parameters:
+///   - filename: The name of the file to read.
+///   - file: The path to the file. Defaults to the current file path.
+/// - Returns: The contents of the file as a string, or `nil` if an error occurs.
 func readFileContents(filename: String, file: StaticString = #file) -> String? {
     let fileURL = URL(fileURLWithPath: "\(file)", isDirectory: false)
     let directoryURL = fileURL.deletingLastPathComponent()
