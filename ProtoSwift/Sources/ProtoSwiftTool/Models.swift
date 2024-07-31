@@ -58,9 +58,9 @@ struct ProtoField {
                 .split(separator: ",")
             let keyType = mapProtoTypeToSwift(String(mapTypes[0]).trimmingCharacters(in: .whitespaces))
             let valueType = mapProtoTypeToSwift(String(mapTypes[1]).trimmingCharacters(in: .whitespaces))
-            return "[\(keyType): \(valueType)]?"
+            return "[\(keyType): \(valueType)]"
         } else if isRepeated {
-            return "[\(caseCorrectedType)]?"
+            return "[\(caseCorrectedType)]"
         } else if isOptional {
             return "\(caseCorrectedType)?"
         } else {

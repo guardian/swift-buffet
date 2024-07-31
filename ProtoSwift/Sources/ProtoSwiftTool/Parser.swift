@@ -5,7 +5,7 @@ import Foundation
 /// - Parameter path: The URL of the .proto file to be parsed.
 /// - Returns: A tuple containing arrays of `ProtoMessage` and `ProtoEnum`.
 /// - Throws: An error if the file cannot be read.
-func parseProtoFile(at path: URL) throws -> ([ProtoMessage], [ProtoEnum]) {
+internal func parseProtoFile(at path: URL) throws -> ([ProtoMessage], [ProtoEnum]) {
     var content = try String(contentsOf: path)
     print("Starting parsing of messages")
     return parseContent(&content, parent: nil)
@@ -17,7 +17,7 @@ func parseProtoFile(at path: URL) throws -> ([ProtoMessage], [ProtoEnum]) {
 ///   - content: The content of the .proto file.
 ///   - parent: The name of the parent message or enum, if any.
 /// - Returns: A tuple containing arrays of `ProtoMessage` and `ProtoEnum`.
-fileprivate func parseContent(
+internal func parseContent(
     _ content: inout String,
     parent: String?
 ) -> ([ProtoMessage], [ProtoEnum]) {
@@ -84,7 +84,7 @@ fileprivate func parseContent(
 ///   - localMessages: A mutable array to store parsed `ProtoMessage` objects.
 ///   - localEnums: A mutable array to store parsed `ProtoEnum` objects.
 ///   - parent: The name of the parent message or enum, if any.
-fileprivate func processEnum(
+internal func processEnum(
     _ name: String,
     _ body: inout String,
     _ localMessages: inout [ProtoMessage],
@@ -117,7 +117,7 @@ fileprivate func processEnum(
 ///   - localMessages: A mutable array to store parsed `ProtoMessage` objects.
 ///   - localEnums: A mutable array to store parsed `ProtoEnum` objects.
 ///   - parent: The name of the parent message, if any.
-fileprivate func processMessage(
+internal func processMessage(
     _ name: String,
     _ body: inout String,
     _ localMessages: inout [ProtoMessage],
@@ -148,7 +148,7 @@ fileprivate func processMessage(
 ///
 /// - Parameter content: The content of the message.
 /// - Returns: An array of `ProtoField` representing the fields of the message.
-fileprivate func parseMessageFields(from content: String) -> [ProtoField] {
+internal func parseMessageFields(from content: String) -> [ProtoField] {
     var fields: [ProtoField] = []
 
     // Use Swift's Regex for parsing fields
@@ -183,7 +183,7 @@ fileprivate func parseMessageFields(from content: String) -> [ProtoField] {
 ///
 /// - Parameter content: The content of the enum.
 /// - Returns: An array of `ProtoEnumCase` representing the cases of the enum.
-fileprivate func parseEnumCases(from content: String) -> [ProtoEnumCase] {
+internal func parseEnumCases(from content: String) -> [ProtoEnumCase] {
     var cases: [ProtoEnumCase] = []
 
     // Use Swift's Regex for parsing enum cases

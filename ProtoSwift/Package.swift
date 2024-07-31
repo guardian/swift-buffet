@@ -11,10 +11,11 @@ let package = Package(
     ],
     products: [
         .plugin(name: "ProtoSwiftPlugin", targets: ["ProtoSwiftPlugin"]),
-        .executable(name: "ProtoSwiftTool", targets: ["ProtoSwiftTool"]),
+        .executable(name: "ProtoSwiftTool", targets: ["ProtoSwiftTool"])
     ],
     targets: [
         .plugin(name: "ProtoSwiftPlugin", capability: .buildTool(), dependencies: ["ProtoSwiftTool"]),
         .executableTarget(name: "ProtoSwiftTool"),
+        .testTarget(name: "ProtoSwiftToolTests", dependencies: ["ProtoSwiftTool"])
     ]
 )

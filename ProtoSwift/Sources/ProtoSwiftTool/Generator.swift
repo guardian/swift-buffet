@@ -16,6 +16,8 @@ func generateSwiftCode(from messages: [ProtoMessage], enums: [ProtoEnum]) -> Str
         writeTimeIntervalHelper(messages, to: &output)
     }
 
+    writeDateFormatter(to: &output)
+
     return output
 }
 
@@ -24,7 +26,7 @@ func generateSwiftCode(from messages: [ProtoMessage], enums: [ProtoEnum]) -> Str
 /// - Parameters:
 ///   - enums: An array of `ProtoEnum` to be written.
 ///   - output: A mutable string where the generated code will be appended.
-fileprivate func write(_ enums: [ProtoEnum], to output: inout String) {
+internal func write(_ enums: [ProtoEnum], to output: inout String) {
     if enums.isEmpty == false {
         output += "// MARK: - Enums\n"
     }
@@ -37,12 +39,16 @@ fileprivate func write(_ enums: [ProtoEnum], to output: inout String) {
         if let parent = protoEnum.parentName {
             output += "extension Blueprint\(parent) {\n"
         }
+
         output += "public enum Blueprint\(protoEnum.name): Int, Codable {\n"
         for (caseName, caseValue) in pair {
             output += "    case \(caseName) = \(caseValue)\n"
         }
+
         writeEnumProtoInit(for: protoEnum, to: &output)
-        if let parent = protoEnum.parentName {
+        writCodableInit(for: protoEnum, to: &output)
+
+        if protoEnum.parentName != nil {
             output += "}\n"
         }
         output += "}\n\n"
@@ -54,10 +60,12 @@ fileprivate func write(_ enums: [ProtoEnum], to output: inout String) {
 /// - Parameters:
 ///   - protoEnum: The `ProtoEnum` to write the initializer for.
 ///   - output: A mutable string where the generated code will be appended.
-fileprivate func writeEnumProtoInit(for protoEnum: ProtoEnum, to output: inout String) {
+internal func writeEnumProtoInit(for protoEnum: ProtoEnum, to output: inout String) {
+    output += "#if USE_PROTO\n"
     output += "    init?(_ proto: Proto\(protoEnum.fullName)) {\n"
     output += "        self.init(rawValue: proto.rawValue)\n"
     output += "    }\n"
+    output += "#endif\n"
 }
 
 /// Writes the Swift code for protocol buffer messages.
@@ -67,7 +75,7 @@ fileprivate func writeEnumProtoInit(for protoEnum: ProtoEnum, to output: inout S
 ///   - output: A mutable string where the generated code will be appended.
 /// - Returns: A boolean indicating whether a TimeInterval helper is needed.
 @discardableResult
-fileprivate func write(_ messages: [ProtoMessage], to output: inout String) -> Bool {
+internal func write(_ messages: [ProtoMessage], to output: inout String) -> Bool {
     if messages.isEmpty == false {
         output += "// MARK: - Structs\n"
     }
@@ -77,15 +85,20 @@ fileprivate func write(_ messages: [ProtoMessage], to output: inout String) -> B
     for message in messages.sorted(by: { $0.name < $1.name }) {
         output += "public struct Blueprint\(message.name): Codable {\n"
 
-        let hasTimeInterval = addProperties(for: message, to: &output)
-
-        addBasicInit(for: message, to: &output)
-        writeMessageProtoInit(for: message, to: &output)
+        let hasTimeInterval = writeProperties(for: message, to: &output)
 
         if hasTimeInterval {
-            writeDurationInit(for: message, to: &output)
             needsTimeIntervalHelper = true
         }
+
+        writeCodingKeys(for: message, to: &output)
+
+        writeBasicInit(for: message, to: &output)
+
+        writCodableInit(for: message, to: &output)
+
+        writeMessageProtoInit(for: message, to: &output)
+
 
         output += "}\n\n"
     }
@@ -100,8 +113,11 @@ fileprivate func write(_ messages: [ProtoMessage], to output: inout String) -> B
 ///   - output: A mutable string where the generated code will be appended.
 /// - Returns: A boolean indicating whether the message has a TimeInterval property.
 @discardableResult
-fileprivate func addProperties(for message: ProtoMessage, to output: inout String) -> Bool {
+internal func writeProperties(for message: ProtoMessage, to output: inout String) -> Bool {
     var hasTimeInterval = false
+
+    output += "    public let localID = UUID()\n"
+
     for field in message.fields {
         if let comment = field.comment {
             output += "\n"
@@ -121,6 +137,7 @@ fileprivate func addProperties(for message: ProtoMessage, to output: inout Strin
             hasTimeInterval = true
         }
     }
+
     return hasTimeInterval
 }
 
@@ -129,7 +146,7 @@ fileprivate func addProperties(for message: ProtoMessage, to output: inout Strin
 /// - Parameters:
 ///   - message: The `ProtoMessage` to add the initializer for.
 ///   - output: A mutable string where the generated code will be appended.
-fileprivate func addBasicInit(for message: ProtoMessage, to output: inout String) {
+internal func writeBasicInit(for message: ProtoMessage, to output: inout String) {
 
     func addDefaultValue(for field: ProtoField, to output: inout String) {
         if field.isOptional {
@@ -185,7 +202,8 @@ fileprivate func addBasicInit(for message: ProtoMessage, to output: inout String
 /// - Parameters:
 ///   - message: The `ProtoMessage` to write the initializer for.
 ///   - output: A mutable string where the generated code will be appended.
-fileprivate func writeMessageProtoInit(for message: ProtoMessage, to output: inout String) {
+internal func writeMessageProtoInit(for message: ProtoMessage, to output: inout String) {
+    output += "#if USE_PROTO\n"
     output += "    init?(_ proto: Proto\(message.name)) {\n"
     for field in message.fields {
         if field.isPrimitiveType {
@@ -205,6 +223,15 @@ fileprivate func writeMessageProtoInit(for message: ProtoMessage, to output: ino
         }
     }
     output += "    }\n"
+    output += "#endif\n"
+}
+
+internal func writeCodingKeys(for message: ProtoMessage, to output: inout String) {
+    output += "\n    enum CodingKeys: String, CodingKey {\n"
+    for field in message.fields {
+        output += "        case \(field.caseCorrectName) = \"\(snakeToCamelCase(field.name))\"\n"
+    }
+    output += "    }\n"
 }
 
 /// Writes the custom initializer and encoder for messages with TimeInterval fields.
@@ -212,30 +239,32 @@ fileprivate func writeMessageProtoInit(for message: ProtoMessage, to output: ino
 /// - Parameters:
 ///   - message: The `ProtoMessage` to write the custom initializer and encoder for.
 ///   - output: A mutable string where the generated code will be appended.
-fileprivate func writeDurationInit(for message: ProtoMessage, to output: inout String) {
-    output += "\n    enum CodingKeys: String, CodingKey {\n"
-    for field in message.fields {
-        output += "        case \(field.caseCorrectName) = \"\(field.caseCorrectName)\"\n"
-    }
-    output += "    }\n"
-
+internal func writCodableInit(for message: ProtoMessage, to output: inout String) {
     output += "\n"
     output += "    public init(from decoder: Decoder) throws {\n"
     output += "        let container = try decoder.container(keyedBy: CodingKeys.self)\n"
 
     for field in message.fields {
-        switch field.caseCorrectedType {
-        case "TimeInterval":
+        if field.isRepeated {
+            output += "        self.\(field.caseCorrectName) = try container.decodeIfPresent(\(field.caseCorrectedType).self, forKey: .\(field.caseCorrectName)) ?? []\n"
+        } else if field.isMap {
+            output += "        self.\(field.caseCorrectName) = try container.decodeIfPresent(\(field.caseCorrectedType).self, forKey: .\(field.caseCorrectName)) ?? [:]\n"
+        } else if field.caseCorrectedType == "TimeInterval" {
             output += "        let \(field.caseCorrectName)String = try container.decode(String.self, forKey: .\(field.caseCorrectName))\n"
             output += "        self.\(field.caseCorrectName) = TimeInterval(from: \(field.caseCorrectName)String) ?? 0\n"
-        default:
+        } else if field.caseCorrectedType.contains("Date") {
+            output += "        let \(field.caseCorrectName)String = try container.decode(String.self, forKey: .\(field.caseCorrectName))\n"
+            output += "        self.\(field.caseCorrectName) = dateFormatter.date(from: \(field.caseCorrectName)String)\n"
+        } else if field.isOptional {
+            output += "        self.\(field.caseCorrectName) = try container.decodeIfPresent(\(field.caseCorrectedType.replacingOccurrences(of: "?", with: "")).self, forKey: .\(field.caseCorrectName))\n"
+        } else if field.type == "bool" {
+            output += "        self.\(field.caseCorrectName) = try container.decodeIfPresent(\(field.caseCorrectedType).self, forKey: .\(field.caseCorrectName)) ?? false\n"
+        } else {
             output += "        self.\(field.caseCorrectName) = try container.decode(\(field.caseCorrectedType).self, forKey: .\(field.caseCorrectName))\n"
         }
     }
+    output += "    }\n\n"
 
-    output += "    }\n"
-
-    output += "\n"
     output += "    public func encode(to encoder: Encoder) throws {\n"
     output += "        var container = encoder.container(keyedBy: CodingKeys.self)\n"
 
@@ -252,12 +281,57 @@ fileprivate func writeDurationInit(for message: ProtoMessage, to output: inout S
     output += "    }\n"
 }
 
+/// Writes the custom initializer and encoder for messages with TimeInterval fields.
+///
+/// - Parameters:
+///   - protoEnum: The `ProtoEnum` to write the custom initializer and encoder for.
+///   - output: A mutable string where the generated code will be appended.
+internal func writCodableInit(for protoEnum: ProtoEnum, to output: inout String) {
+    let strippedCases = stripCommonPrefix(from: protoEnum.cases)
+    let pair = zip(
+        strippedCases.map(\.name),
+        protoEnum.cases.map(\.name)
+    )
+    output += "\n"
+    output += "    public init(from decoder: Decoder) throws {\n"
+    output += "        let container = try decoder.singleValueContainer()\n\n"
+    output += "        if let stringValue = try? container.decode(String.self) {\n"
+    output += "            // Convert string to enum\n"
+    output += "            switch stringValue {\n"
+    for (caseName, stringName) in pair {
+        output += "            case \"\(stringName)\":\n"
+        output += "                self = .\(caseName)\n"
+    }
+    output += "            default:\n"
+    output += "                self = .unspecified\n"
+    output += "            }\n"
+    output += "        } else if let intValue = try? container.decode(Int.self) {\n"
+    output += "            // Convert integer to enum\n"
+    output += "            self = Blueprint\(protoEnum.name)(rawValue: intValue) ?? .unspecified\n"
+    output += "        } else {\n"
+    output += "            throw DecodingError.dataCorruptedError(in: container, debugDescription: \"Invalid value for MyEnum\")\n"
+    output += "        }\n"
+    output += "    }\n\n"
+
+    output += "    public func encode(to encoder: Encoder) throws {\n"
+    output += "        var container = encoder.singleValueContainer()\n"
+    output += "        switch self {\n"
+    for (caseName, stringName) in pair {
+        output += "        case .\(caseName):\n"
+        output += "            try container.encode(\"\(stringName)\")\n"
+    }
+    output += "        default:\n"
+    output += "            try container.encode(\"UNSPECIFIED\")\n"
+    output += "        }\n"
+    output += "    }\n"
+}
+
 /// Writes the TimeInterval helper extension if needed.
 ///
 /// - Parameters:
 ///   - messages: An array of `ProtoMessage` to check for TimeInterval fields.
 ///   - output: A mutable string where the generated code will be appended.
-fileprivate func writeTimeIntervalHelper(_ messages: [ProtoMessage], to output: inout String) {
+internal func writeTimeIntervalHelper(_ messages: [ProtoMessage], to output: inout String) {
     if let fileContents = readFileContents(filename: "TimeInterval+String.swift") {
         output += "// MARK: - TimeInterval Extension\n"
         output += fileContents
@@ -266,4 +340,13 @@ fileprivate func writeTimeIntervalHelper(_ messages: [ProtoMessage], to output: 
     } else {
         output += "// File not found."
     }
+}
+
+internal func writeDateFormatter(to output: inout String) {
+    output += "\n\n"
+    output += "var dateFormatter: ISO8601DateFormatter {\n"
+    output += "    let formatter = ISO8601DateFormatter()\n"
+    output += "    formatter.formatOptions = [.withFullDate, .withFullTime, .withTimeZone]\n"
+    output += "    return formatter\n"
+    output += "}\n"
 }
