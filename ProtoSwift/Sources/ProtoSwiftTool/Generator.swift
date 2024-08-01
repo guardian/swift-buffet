@@ -206,18 +206,18 @@ internal func writeMessageProtoInit(for message: ProtoMessage, to output: inout 
     output += "#if USE_PROTO\n"
     output += "    init?(_ proto: Proto\(message.name)) {\n"
     for field in message.fields {
-        if field.isPrimitiveType {
-            output += "        self.\(field.caseCorrectName) = proto.\(field.caseCorrectName)\n"
-        } else if field.isRepeated {
+        if field.isRepeated {
             output += "        self.\(field.caseCorrectName) = proto.\(field.caseCorrectName).compactMap { \(field.caseCorrectedBaseType)($0) }\n"
         } else if field.isMap {
             output += "        self.\(field.caseCorrectName) = proto.\(field.caseCorrectName).reduce(into: \(field.caseCorrectedType.replacingOccurrences(of: "?", with: ""))()) { $0[$1.key] = $1.value }\n"
-        } else if field.isOptional == false {
-            output += "        self.\(field.caseCorrectName) = \(field.caseCorrectedBaseType)(proto.\(field.caseCorrectName))!\n"
         } else if field.caseCorrectedBaseType == "TimeInterval" {
             output += "        self.\(field.caseCorrectName) = proto.\(field.caseCorrectName).timeInterval\n"
         } else if field.caseCorrectedBaseType == "Date" {
             output += "        self.\(field.caseCorrectName) = proto.\(field.caseCorrectName).date\n"
+        } else if field.isPrimitiveType {
+            output += "        self.\(field.caseCorrectName) = proto.\(field.caseCorrectName)\n"
+        } else if field.isOptional == false {
+            output += "        self.\(field.caseCorrectName) = \(field.caseCorrectedBaseType)(proto.\(field.caseCorrectName))!\n"
         } else {
             output += "        self.\(field.caseCorrectName) = \(field.caseCorrectedBaseType)(proto.\(field.caseCorrectName))\n"
         }
