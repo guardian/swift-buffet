@@ -46,7 +46,7 @@ internal func write(_ enums: [ProtoEnum], to output: inout String) {
         }
 
         writeEnumProtoInit(for: protoEnum, to: &output)
-        writCodableInit(for: protoEnum, to: &output)
+        writeCodableInit(for: protoEnum, to: &output)
 
         if protoEnum.parentName != nil {
             output += "}\n"
@@ -95,7 +95,7 @@ internal func write(_ messages: [ProtoMessage], to output: inout String) -> Bool
 
         writeBasicInit(for: message, to: &output)
 
-        writCodableInit(for: message, to: &output)
+        writeCodableInit(for: message, to: &output)
 
         writeMessageProtoInit(for: message, to: &output)
 
@@ -239,7 +239,7 @@ internal func writeCodingKeys(for message: ProtoMessage, to output: inout String
 /// - Parameters:
 ///   - message: The `ProtoMessage` to write the custom initializer and encoder for.
 ///   - output: A mutable string where the generated code will be appended.
-internal func writCodableInit(for message: ProtoMessage, to output: inout String) {
+internal func writeCodableInit(for message: ProtoMessage, to output: inout String) {
     output += "\n"
     output += "    public init(from decoder: Decoder) throws {\n"
     output += "        let container = try decoder.container(keyedBy: CodingKeys.self)\n"
@@ -286,7 +286,7 @@ internal func writCodableInit(for message: ProtoMessage, to output: inout String
 /// - Parameters:
 ///   - protoEnum: The `ProtoEnum` to write the custom initializer and encoder for.
 ///   - output: A mutable string where the generated code will be appended.
-internal func writCodableInit(for protoEnum: ProtoEnum, to output: inout String) {
+internal func writeCodableInit(for protoEnum: ProtoEnum, to output: inout String) {
     let strippedCases = stripCommonPrefix(from: protoEnum.cases)
     let pair = zip(
         strippedCases.map(\.name),
