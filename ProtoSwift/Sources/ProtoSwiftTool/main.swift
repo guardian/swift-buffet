@@ -26,15 +26,25 @@ struct ProtoSwiftTool: ParsableCommand {
     )
     var protoPrefix: String = "Proto"
 
+    @Flag(name: .shortAndLong, help: "Show all logging")
+    var verbose: Bool = false
+
+    @Flag(name: .shortAndLong, help: "Show no logging")
+    var quite: Bool = false
+
     func run() throws {
         let inputURL = URL(fileURLWithPath: inputProto)
         let outputURL = URL(fileURLWithPath: outputSwift)
 
-        print("Processing \(inputURL)")
-
+        if quite == false {
+            print("Processing \(inputURL)")
+        }
+        
         let (messages, enums) = try parseProtoFile(
             at: inputURL,
-            with: swiftPrefix
+            with: swiftPrefix,
+            verbose: verbose,
+            quite: quite
         )
        
         let swiftCode = generateSwiftCode(

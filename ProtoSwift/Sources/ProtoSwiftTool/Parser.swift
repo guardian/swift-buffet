@@ -5,13 +5,19 @@ import Foundation
 /// - Parameter path: The URL of the .proto file to be parsed.
 /// - Returns: A tuple containing arrays of `ProtoMessage` and `ProtoEnum`.
 /// - Throws: An error if the file cannot be read.
-internal func parseProtoFile(at path: URL, with swiftPrefix: String) throws -> ([ProtoMessage], [ProtoEnum]) {
+internal func parseProtoFile(
+    at path: URL,
+    with swiftPrefix: String,
+    verbose: Bool,
+    quite: Bool
+) throws -> ([ProtoMessage], [ProtoEnum]) {
     var content = try String(contentsOf: path)
-    print("Starting parsing of messages")
     return parseContent(
         &content,
         parent: nil,
-        with: swiftPrefix
+        with: swiftPrefix,
+        verbose: verbose,
+        quite: quite
     )
 }
 
@@ -24,7 +30,9 @@ internal func parseProtoFile(at path: URL, with swiftPrefix: String) throws -> (
 internal func parseContent(
     _ content: inout String,
     parent: String?,
-    with swiftPrefix: String
+    with swiftPrefix: String,
+    verbose: Bool,
+    quite: Bool
 ) -> ([ProtoMessage], [ProtoEnum]) {
 
     var localMessages: [ProtoMessage] = []
@@ -45,7 +53,9 @@ internal func parseContent(
             &localMessages,
             &localEnums,
             parent,
-            swiftPrefix
+            swiftPrefix,
+            verbose: verbose,
+            quite: quite
         )
 
         // Remove the parsed content to avoid duplication
@@ -70,7 +80,9 @@ internal func parseContent(
             &localMessages,
             &localEnums,
             parent,
-            swiftPrefix
+            swiftPrefix,
+            verbose: verbose,
+            quite: quite
         )
 
         // Remove the parsed content to avoid duplication
@@ -97,21 +109,33 @@ internal func processEnum(
     _ localMessages: inout [ProtoMessage],
     _ localEnums: inout [ProtoEnum],
     _ parent: String?,
-    _ prefix: String
+    _ prefix: String,
+    verbose: Bool,
+    quite: Bool
 ) {
-    print("Matched nested enum: \(name)")
-    print("Nested enum body: \(body)")
-
+    if quite == false {
+        print("Matched enum: \(name)")
+    }
+    if verbose == true {
+        print("Matched enum body: \(body)")
+    }
     let (nestedMessages, nestedEnums) = parseContent(
         &body,
         parent: name,
-        with: prefix
+        with: prefix,
+        verbose: verbose,
+        quite: quite
     )
 
     localMessages.append(contentsOf: nestedMessages)
     localEnums.append(contentsOf: nestedEnums)
 
-    let cases = parseEnumCases(from: body)
+    let cases = parseEnumCases(
+        from: body,
+        verbose: verbose,
+        quite: quite
+    )
+
     localEnums.append(
         ProtoEnum(
             name: name,
@@ -135,21 +159,34 @@ internal func processMessage(
     _ localMessages: inout [ProtoMessage],
     _ localEnums: inout [ProtoEnum],
     _ parent: String?,
-    _ prefix: String
+    _ prefix: String,
+    verbose: Bool,
+    quite: Bool
 ) {
-    print("Matched message: \(name)")
-    print("Message body: \(body)")
+    if quite == false {
+        print("Matched message: \(name)")
+    }
+    if verbose == true {
+        print("Message body: \(body)")
+    }
 
     let (nestedMessages, nestedEnums) = parseContent(
         &body,
         parent: name,
-        with: prefix
+        with: prefix,
+        verbose: verbose,
+        quite: quite
     )
 
     localMessages.append(contentsOf: nestedMessages)
     localEnums.append(contentsOf: nestedEnums)
 
-    let fields = parseMessageFields(from: body, with: prefix)
+    let fields = parseMessageFields(
+        from: body,
+        with: prefix,
+        verbose: verbose,
+        quite: quite
+    )
 
     localMessages.append(
         ProtoMessage(
@@ -165,12 +202,19 @@ internal func processMessage(
 ///
 /// - Parameter content: The content of the message.
 /// - Returns: An array of `ProtoField` representing the fields of the message.
-internal func parseMessageFields(from content: String, with swiftPrefix: String) -> [ProtoField] {
+internal func parseMessageFields(
+    from content: String,
+    with swiftPrefix: String,
+    verbose: Bool,
+    quite: Bool
+) -> [ProtoField] {
     var fields: [ProtoField] = []
 
     // Use Swift's Regex for parsing fields
     let fieldMatches = content.matches(of: fieldPattern)
-    print("Field matches count: \(fieldMatches.count)")
+    if quite == false {
+        print("Field matches count: \(fieldMatches.count)")
+    }
 
     for match in fieldMatches {
         let comment = match.output.1.map { String($0) }
@@ -180,7 +224,9 @@ internal func parseMessageFields(from content: String, with swiftPrefix: String)
         let isOptional = fieldModifier?.contains("optional") == true
         let isRepeated = fieldModifier?.contains("repeated") == true
         let isMap = fieldModifier?.starts(with: "map") == true
-        print("Matched field type: \(fieldType), field name: \(fieldName), isOptional: \(isOptional), isRepeated: \(isRepeated), isMap: \(isMap))")
+        if verbose {
+            print("Matched field type: \(fieldType), field name: \(fieldName), isOptional: \(isOptional), isRepeated: \(isRepeated), isMap: \(isMap))")
+        }
         fields.append(
             ProtoField(
                 swiftPrefix: swiftPrefix,
@@ -201,17 +247,26 @@ internal func parseMessageFields(from content: String, with swiftPrefix: String)
 ///
 /// - Parameter content: The content of the enum.
 /// - Returns: An array of `ProtoEnumCase` representing the cases of the enum.
-internal func parseEnumCases(from content: String) -> [ProtoEnumCase] {
+internal func parseEnumCases(
+    from content: String,
+    verbose: Bool,
+    quite: Bool
+) -> [ProtoEnumCase] {
     var cases: [ProtoEnumCase] = []
 
     // Use Swift's Regex for parsing enum cases
     let caseMatches = content.matches(of: enumCasePattern)
-    print("Enum case matches count: \(caseMatches.count)")
+
+    if quite == false {
+        print("Enum case matches count: \(caseMatches.count)")
+    }
 
     for match in caseMatches {
         let caseName = String(match.1)
         let caseValue = Int(match.2)!
-        print("Matched enum case name: \(caseName), value: \(caseValue)")
+        if verbose {
+            print("Matched enum case name: \(caseName), value: \(caseValue)")
+        }
         cases.append(
             ProtoEnumCase(
                 name: caseName,

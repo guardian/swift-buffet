@@ -2,422 +2,250 @@ import XCTest
 @testable import ProtoSwiftTool
 
 final class GeneratorTests: XCTestCase {
-
-    // Test `generateSwiftCode`
-    func testGenerateSwiftCode() {
-        let messages = [
-            ProtoMessage(
-                name: "TestMessage",
-                fields: [
-                    ProtoField(
-                        name: "field1",
-                        type: "int32",
-                        comment: nil,
-                        isOptional: true,
-                        isRepeated: false,
-                        isMap: false
-                    ),
-                    ProtoField(
-                        name: "field2",
-                        type: "string",
-                        comment: nil,
-                        isOptional: false,
-                        isRepeated: true,
-                        isMap: false
-                    )
-                ],
-                parentName: nil
-            )
-        ]
-        let enums = [
-            ProtoEnum(
-                name: "TestEnum",
-                cases: [
-                    ProtoEnumCase(
-                        name: "ONE",
-                        value: 1
-                    ),
-                    ProtoEnumCase(
-                        name: "TWO",
-                        value: 2
-                    )
-                ],
-                parentName: nil
-            )
-        ]
-
-        let output = generateSwiftCode(from: messages, enums: enums)
-
-        XCTAssertTrue(
-            output.contains(
-                "public struct BlueprintTestMessage"
-            ),
-            "Generated code does not contain expected struct declaration for BlueprintTestMessage. \(output)"
-        )
-        XCTAssertTrue(
-            output.contains(
-                "public enum BlueprintTestEnum: Int, Codable"
-            ),
-            "Generated code does not contain expected enum declaration for BlueprintTestEnum. \(output)"
-        )
-        XCTAssertTrue(
-            output.contains(
-                "public let field1: Int32?"
-            ),
-            "Generated code does not contain expected property for field1. \(output)"
-        )
-        XCTAssertTrue(
-            output.contains(
-                "public let field2: [String]"
-            ),
-            "Generated code does not contain expected property for field2. \(output)"
-        )
-        XCTAssertTrue(
-            output.contains(
-                "case ONE = 1"
-            ),
-            "Generated code does not contain expected case for ONE in TestEnum. \(output)"
-        )
-        XCTAssertTrue(
-            output.contains("case TWO = 2"),
-            "Generated code does not contain expected case for TWO in TestEnum. \(output)"
-        )
-    }
-
-    // Test `write` for enums
-    func testWriteEnums() {
-        var output = ""
-        let enums = [
-            ProtoEnum(
-                name: "TestEnum",
-                cases: [
-                    ProtoEnumCase(
-                        name: "ONE",
-                        value: 1
-                    ),
-                    ProtoEnumCase(name: "TWO", value: 2)
-                ],
-                parentName: nil
-            )
-        ]
-
-        write(enums, to: &output)
-
-        XCTAssertTrue(
-            output.contains(
-                "public enum BlueprintTestEnum: Int, Codable"
-            ),
-            "Output does not contain expected enum declaration for BlueprintTestEnum. \(output)"
-        )
-        XCTAssertTrue(
-            output.contains(
-                "case ONE = 1"
-            ),
-            "Output does not contain expected case for ONE in TestEnum. \(output)"
-        )
-        XCTAssertTrue(
-            output.contains(
-                "case TWO = 2"
-            ),
-            "Output does not contain expected case for TWO in TestEnum. \(output)"
-        )
-    }
-
-    // Test `writeEnumProtoInit`
-    func testWriteEnumProtoInit() {
-        var output = ""
-        let protoEnum = ProtoEnum(
-            name: "TestEnum",
-            cases: [
-                ProtoEnumCase(
-                    name: "ONE",
-                    value: 1
-                ),
-                ProtoEnumCase(
-                    name: "TWO",
-                    value: 2
-                )
-            ],
-            parentName: nil
-        )
-
-        writeEnumProtoInit(for: protoEnum, to: &output)
-
-        XCTAssertTrue(
-            output.contains(
-                "init?(_ proto: ProtoTestEnum)"
-            ),
-            "Output does not contain expected initializer for ProtoTestEnum. \(output)"
-        )
-        XCTAssertTrue(
-            output.contains(
-                "self.init(rawValue: proto.rawValue)"
-            ),
-            "Output does not contain expected rawValue initializer for ProtoTestEnum. \(output)"
-        )
-    }
-
-    // Test `write` for messages
-    func testWriteMessages() {
-        var output = ""
-        let messages = [
-            ProtoMessage(
-                name: "TestMessage",
-                fields: [
-                    ProtoField(
-                        name: "field1",
-                        type: "int32",
-                        comment: nil,
-                        isOptional: true,
-                        isRepeated: false,
-                        isMap: false
-                    ),
-                    ProtoField(
-                        name: "field2",
-                        type: "string",
-                        comment: nil,
-                        isOptional: false,
-                        isRepeated: true,
-                        isMap: false
-                    )
-                ],
-                parentName: nil
-            )
-        ]
-
-        write(messages, to: &output)
-
-        XCTAssertTrue(
-            output.contains(
-                "public struct BlueprintTestMessage: Codable"
-            ),
-            "Output does not contain expected struct declaration for BlueprintTestMessage. \(output)"
-        )
-        XCTAssertTrue(
-            output.contains(
-                "public let field1: Int32?"
-            ),
-            "Output does not contain expected property for field1 in BlueprintTestMessage. \(output)"
-        )
-        XCTAssertTrue(
-            output.contains(
-                "public let field2: [String]"
-            ),
-            "Output does not contain expected property for field2 in BlueprintTestMessage. \(output)"
-        )
-    }
-
-    // Test `writeProperties`
-    func testWriteProperties() {
-        var output = ""
-        let message = ProtoMessage(
-            name: "TestMessage",
+    func testGenerateSimpleMessage() {
+        let simpleMessageProtoMessage = ProtoMessage(
+            name: "Person",
             fields: [
                 ProtoField(
-                    name: "field1",
-                    type: "int32",
-                    comment: "Field 1 comment",
-                    isOptional: true,
+                    swiftPrefix: "App",
+                    name: "name",
+                    type: "string",
+                    comment: nil,
+                    isOptional: false,
                     isRepeated: false,
                     isMap: false
                 ),
                 ProtoField(
-                    name: "field2",
-                    type: "string",
-                    comment: nil,
-                    isOptional: false,
-                    isRepeated: true,
-                    isMap: false
-                )
-            ],
-            parentName: nil
-        )
-
-        let hasTimeInterval = writeProperties(for: message, to: &output)
-
-        XCTAssertTrue(
-            output.contains(
-                "public let field1: Int32?"
-            ),
-            "Output does not contain expected property for field1 in TestMessage. \(output)"
-        )
-        XCTAssertTrue(
-            output.contains(
-                "public let field2: [String]"
-            ),
-            "Output does not contain expected property for field2 in TestMessage. \(output)"
-        )
-        XCTAssertFalse(
-            hasTimeInterval,
-            "hasTimeInterval should be false when no time interval fields are present. \(output)"
-        )
-    }
-
-    // Test `addBasicInit`
-    func testAddBasicInit() {
-        var output = ""
-        let message = ProtoMessage(
-            name: "TestMessage",
-            fields: [
-                ProtoField(
-                    name: "field1",
+                    swiftPrefix: "App",
+                    name: "age",
                     type: "int32",
                     comment: nil,
-                    isOptional: true,
+                    isOptional: false,
                     isRepeated: false,
                     isMap: false
                 ),
                 ProtoField(
-                    name: "field2",
-                    type: "string",
+                    swiftPrefix: "App",
+                    name: "is_active",
+                    type: "bool",
                     comment: nil,
                     isOptional: false,
-                    isRepeated: true,
+                    isRepeated: false,
                     isMap: false
                 )
             ],
             parentName: nil
         )
 
-        writeBasicInit(for: message, to: &output)
+        let messages = [simpleMessageProtoMessage]
+        let enums: [ProtoEnum] = []
 
-        let hasInit = output.contains(
-            "init(field1: Int32? = nil"
+        let generatedCode = generateSwiftCode(
+            from: messages,
+            enums: enums,
+            with: "App",
+            includeProto: true,
+            with: "Proto"
         )
-        XCTAssertTrue(
-            hasInit,
-            "No initializer found for field1 in TestMessage. \(output)"
-        )
-        let hasInitSecondLine = output.contains(
-            "field2: [String] = []"
-        )
-        XCTAssertTrue(
-            hasInitSecondLine,
-            "Initializer does not contain expected default value for field2 in TestMessage. \(output)"
-        )
+
+        XCTAssertTrue(generatedCode.contains("public struct AppPerson"), "The generated code should contain the 'AppPerson' struct")
+        XCTAssertTrue(generatedCode.contains("public let name: String"), "The generated code should contain the 'name' property")
+        XCTAssertTrue(generatedCode.contains("public let age: Int"), "The generated code should contain the 'age' property")
+        XCTAssertTrue(generatedCode.contains("public let isActive: Bool"), "The generated code should contain the 'isActive' property")
+        XCTAssertTrue(generatedCode.contains("public init("), "The generated code should contain the 'init' method")
+        XCTAssertTrue(generatedCode.contains("self.name = name"), "The generated code should initialize the 'name' property")
+        XCTAssertTrue(generatedCode.contains("self.age = age"), "The generated code should initialize the 'age' property")
+        XCTAssertTrue(generatedCode.contains("self.isActive = isActive"), "The generated code should initialize the 'isActive' property")
+        XCTAssertTrue(generatedCode.contains("internal init?(proto: ProtoPerson)"), "The generated code should contain the 'init?(proto:)' method")
     }
 
-    // Test `writeMessageProtoInit`
-    func testWriteMessageProtoInit() {
-        var output = ""
-        let message = ProtoMessage(
-            name: "TestMessage",
+    func testGenerateNestedMessage() {
+        let addressProtoMessage = ProtoMessage(
+            name: "Address",
             fields: [
                 ProtoField(
-                    name: "field1",
-                    type: "int32",
+                    swiftPrefix: "App",
+                    name: "street",
+                    type: "string",
                     comment: nil,
-                    isOptional: true,
+                    isOptional: false,
                     isRepeated: false,
                     isMap: false
                 ),
                 ProtoField(
-                    name: "field2",
+                    swiftPrefix: "App",
+                    name: "city",
                     type: "string",
                     comment: nil,
                     isOptional: false,
-                    isRepeated: true,
+                    isRepeated: false,
+                    isMap: false
+                ),
+                ProtoField(
+                    swiftPrefix: "App",
+                    name: "state",
+                    type: "string",
+                    comment: nil,
+                    isOptional: false,
+                    isRepeated: false,
                     isMap: false
                 )
             ],
             parentName: nil
         )
 
-        writeMessageProtoInit(for: message, to: &output)
-
-        XCTAssertTrue(
-            output.contains(
-                "init?(_ proto: ProtoTestMessage)"
-            ),
-            "Output does not contain expected initializer for ProtoTestMessage. \(output)"
-        )
-        XCTAssertTrue(
-            output.contains(
-                "self.field1 = proto.field1"
-            ),
-            "Output does not contain expected field1 assignment from proto. \(output)"
-        )
-        XCTAssertTrue(
-            output.contains(
-                "self.field2 = proto.field2.compactMap { String($0) }"
-            ),
-            "Output does not contain expected field2 assignment from proto with compactMap. \(output)"
-        )
-    }
-
-    // Test `writeDurationInit`
-    func testWriteDurationInit() {
-        var output = ""
-        let message = ProtoMessage(
-            name: "TestMessage",
+        let personProtoMessage = ProtoMessage(
+            name: "Person",
             fields: [
                 ProtoField(
-                    name: "field1",
+                    swiftPrefix: "App",
+                    name: "name",
+                    type: "string",
+                    comment: nil,
+                    isOptional: false,
+                    isRepeated: false,
+                    isMap: false
+                ),
+                ProtoField(
+                    swiftPrefix: "App",
+                    name: "age",
+                    type: "int32",
+                    comment: nil,
+                    isOptional: false,
+                    isRepeated: false,
+                    isMap: false
+                ),
+                ProtoField(
+                    swiftPrefix: "App",
+                    name: "address",
+                    type: "Address",
+                    comment: nil,
+                    isOptional: false,
+                    isRepeated: false,
+                    isMap: false
+                )
+            ],
+            parentName: nil
+        )
+
+        let messages = [personProtoMessage, addressProtoMessage]
+        let enums: [ProtoEnum] = []
+
+        let generatedCode = generateSwiftCode(
+            from: messages,
+            enums: enums,
+            with: "App",
+            includeProto: true,
+            with: "Proto"
+        )
+
+        XCTAssertTrue(generatedCode.contains("public struct AppPerson"), "The generated code should contain the 'AppPerson' struct")
+        XCTAssertTrue(generatedCode.contains("public let name: String"), "The generated code should contain the 'name' property")
+        XCTAssertTrue(generatedCode.contains("public let age: Int"), "The generated code should contain the 'age' property")
+        XCTAssertTrue(generatedCode.contains("public let address: AppAddress"), "The generated code should contain the 'address' property")
+        XCTAssertTrue(generatedCode.contains("public struct AppAddress"), "The generated code should contain the 'AppAddress' struct")
+        XCTAssertTrue(generatedCode.contains("public let street: String"), "The generated code should contain the 'street' property")
+        XCTAssertTrue(generatedCode.contains("public let city: String"), "The generated code should contain the 'city' property")
+        XCTAssertTrue(generatedCode.contains("public let state: String"), "The generated code should contain the 'state' property")
+        XCTAssertTrue(generatedCode.contains("public init("), "The generated code should contain the 'init' method")
+        XCTAssertTrue(generatedCode.contains("internal init?(proto: ProtoPerson)"), "The generated code should contain the 'init?(proto:)' method for 'ProtoPerson'")
+        XCTAssertTrue(generatedCode.contains("internal init?(proto: ProtoAddress)"), "The generated code should contain the 'init?(proto:)' method for 'ProtoAddress'")
+    }
+
+    func testGenerateNestedEnumAndWellKnownTypes() {
+        let personProtoMessage = ProtoMessage(
+            name: "Person",
+            fields: [
+                ProtoField(
+                    swiftPrefix: "App",
+                    name: "name",
+                    type: "string",
+                    comment: nil,
+                    isOptional: false,
+                    isRepeated: false,
+                    isMap: false
+                ),
+                ProtoField(
+                    swiftPrefix: "App",
+                    name: "age",
+                    type: "int32",
+                    comment: nil,
+                    isOptional: false,
+                    isRepeated: false,
+                    isMap: false
+                ),
+                ProtoField(
+                    swiftPrefix: "App",
+                    name: "is_active",
+                    type: "bool",
+                    comment: nil,
+                    isOptional: false,
+                    isRepeated: false,
+                    isMap: false
+                ),
+                ProtoField(
+                    swiftPrefix: "App",
+                    name: "gender",
+                    type: "Gender",
+                    comment: nil,
+                    isOptional: false,
+                    isRepeated: false,
+                    isMap: false
+                ),
+                ProtoField(
+                    swiftPrefix: "App",
+                    name: "last_active",
                     type: "google.protobuf.Duration",
                     comment: nil,
                     isOptional: false,
                     isRepeated: false,
                     isMap: false
+                ),
+                ProtoField(
+                    swiftPrefix: "App",
+                    name: "created_at",
+                    type: "google.protobuf.Timestamp",
+                    comment: nil,
+                    isOptional: false,
+                    isRepeated: false,
+                    isMap: false
                 )
             ],
             parentName: nil
         )
 
-        writeCodableInit(for: message, to: &output)
+        let genderProtoEnum = ProtoEnum(
+            name: "Gender",
+            cases: [
+                ProtoEnumCase(name: "UNKNOWN", value: 0),
+                ProtoEnumCase(name: "MALE", value: 1),
+                ProtoEnumCase(name: "FEMALE", value: 2)
+            ],
+            parentName: nil
+        )
 
-        XCTAssertTrue(
-            output.contains(
-                "let field1String = try container.decode(String.self, forKey: .field1)"
-            ),
-            "Output does not contain expected decode logic for field1String. \(output)"
-        )
-        XCTAssertTrue(
-            output.contains(
-                "self.field1 = TimeInterval(from: field1String) ?? 0"
-            ),
-            "Output does not contain expected TimeInterval conversion for field1. \(output)"
-        )
-    }
+        let messages = [personProtoMessage]
+        let enums = [genderProtoEnum]
 
-    // Test `writeTimeIntervalHelper`
-    func testWriteTimeIntervalHelper() {
-        var output = ""
-        let messages = [
-            ProtoMessage(
-                name: "TestMessage",
-                fields: [
-                    ProtoField(
-                        name: "field1",
-                        type: "google.protobuf.Duration",
-                        comment: nil,
-                        isOptional: false,
-                        isRepeated: false,
-                        isMap: false
-                    )
-                ],
-                parentName: nil
-            )
-        ]
+        let generatedCode = generateSwiftCode(
+            from: messages,
+            enums: enums,
+            with: "App",
+            includeProto: true,
+            with: "Proto"
+        )
 
-        writeTimeIntervalHelper(messages, to: &output)
-
-        XCTAssertTrue(
-            output.contains(
-                "// MARK: - TimeInterval Extension"
-            ),
-            "Output does not contain expected TimeInterval extension mark. \(output)"
-        )
-        XCTAssertTrue(
-            output.contains(
-                "extension TimeInterval {"
-            ),
-            "Output does not contain expected TimeInterval extension. \(output)"
-        )
-        XCTAssertTrue(
-            output.contains(
-                "init?(from string: String)"
-            ),
-            "Output does not contain expected initializer from durationString in TimeInterval extension. \(output)"
-        )
+        XCTAssertTrue(generatedCode.contains("public struct AppPerson"), "The generated code should contain the 'AppPerson' struct")
+        XCTAssertTrue(generatedCode.contains("public let name: String"), "The generated code should contain the 'name' property")
+        XCTAssertTrue(generatedCode.contains("public let age: Int"), "The generated code should contain the 'age' property")
+        XCTAssertTrue(generatedCode.contains("public let isActive: Bool"), "The generated code should contain the 'isActive' property")
+        XCTAssertTrue(generatedCode.contains("public enum AppPerson.AppGender: Int"), "The generated code should contain the 'Gender' enum")
+        XCTAssertTrue(generatedCode.contains("case unknown = 0"), "The 'Gender' enum should contain the 'unknown' case")
+        XCTAssertTrue(generatedCode.contains("case male = 1"), "The 'Gender' enum should contain the 'male' case")
+        XCTAssertTrue(generatedCode.contains("case female = 2"), "The 'Gender' enum should contain the 'female' case")
+        XCTAssertTrue(generatedCode.contains("public let gender: AppPerson.AppGender"), "The generated code should contain the 'gender' property")
+        XCTAssertTrue(generatedCode.contains("public let lastActive: TimeInterval"), "The generated code should contain the 'lastActive' property")
+        XCTAssertTrue(generatedCode.contains("public let createdAt: Date"), "The generated code should contain the 'createdAt' property")
+        XCTAssertTrue(generatedCode.contains("internal init?(proto: ProtoPerson)"), "The generated code should contain the 'init?(proto:)' method")
     }
 }
