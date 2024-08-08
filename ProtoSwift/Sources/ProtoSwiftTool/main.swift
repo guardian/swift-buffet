@@ -1,23 +1,56 @@
 import Foundation
+import ArgumentParser
 
-func main() {
-    if CommandLine.argc < 3 {
-        print("Usage: ProtoSwiftTool <input.proto> <output.swift>")
-        exit(1)
-    }
+struct ProtoSwiftTool: ParsableCommand {
+    @Argument(help: "The input .proto file")
+    var inputProto: String
 
-    let inputURL = URL(fileURLWithPath: CommandLine.arguments[1])
-    let outputURL = URL(fileURLWithPath: CommandLine.arguments[2])
+    @Argument(help: "The output .swift file")
+    var outputSwift: String
 
-    do {
+    @Option(
+        name: .customLong("swift-prefix"),
+        help: "The prefix to use for Swift objects"
+    )
+    var swiftPrefix: String = ""
+
+    @Option(
+        name: .customLong("include-protobuf"),
+        help: "Add initialisers from protobuf objects"
+    )
+    var includeProtobuf: Bool = false
+
+    @Option(
+        name: .customLong("proto-prefix"),
+        help: "The prefix to use for protobuf objects"
+    )
+    var protoPrefix: String = "Proto"
+
+    func run() throws {
+        let inputURL = URL(fileURLWithPath: inputProto)
+        let outputURL = URL(fileURLWithPath: outputSwift)
+
         print("Processing \(inputURL)")
-        let (messages, enums) = try parseProtoFile(at: inputURL)
-        let swiftCode = generateSwiftCode(from: messages, enums: enums)
-        try swiftCode.write(to: outputURL, atomically: true, encoding: .utf8)
-    } catch {
-        print("Failed to generate Swift code: \(error)")
-        exit(1)
+
+        let (messages, enums) = try parseProtoFile(
+            at: inputURL,
+            with: swiftPrefix
+        )
+       
+        let swiftCode = generateSwiftCode(
+            from: messages,
+            enums: enums,
+            with: swiftPrefix,
+            includeProto: includeProtobuf,
+            with: protoPrefix
+        )
+
+        try swiftCode.write(
+            to: outputURL,
+            atomically: true,
+            encoding: .utf8
+        )
     }
 }
 
-main()
+ProtoSwiftTool.main()

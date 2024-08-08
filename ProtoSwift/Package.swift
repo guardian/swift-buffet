@@ -13,9 +13,27 @@ let package = Package(
         .plugin(name: "ProtoSwiftPlugin", targets: ["ProtoSwiftPlugin"]),
         .executable(name: "ProtoSwiftTool", targets: ["ProtoSwiftTool"])
     ],
+    dependencies: [
+        .package(
+            url: "https://github.com/apple/swift-argument-parser.git",
+            .upToNextMajor(from: "1.5.0")
+        ),
+    ],
     targets: [
-        .plugin(name: "ProtoSwiftPlugin", capability: .buildTool(), dependencies: ["ProtoSwiftTool"]),
-        .executableTarget(name: "ProtoSwiftTool"),
-        .testTarget(name: "ProtoSwiftToolTests", dependencies: ["ProtoSwiftTool"])
+        .plugin(
+            name: "ProtoSwiftPlugin",
+            capability: .buildTool(),
+            dependencies: ["ProtoSwiftTool"]
+        ),
+        .executableTarget(
+            name: "ProtoSwiftTool",
+            dependencies: [
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
+            ]
+        ),
+        .testTarget(
+            name: "ProtoSwiftToolTests",
+            dependencies: ["ProtoSwiftTool"]
+        )
     ]
 )

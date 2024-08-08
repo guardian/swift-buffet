@@ -6,39 +6,33 @@ import Foundation
 ///   - type: The protocol buffer type as a string.
 ///   - isMap: A boolean indicating if the type is a map type. Defaults to `false`.
 /// - Returns: The corresponding Swift type as a string.
-func mapProtoTypeToSwift(_ type: String, isMap: Bool = false) -> String {
-    if isMap { // Skip map types since they are handled separately
-        return type
-    }
+func swiftType(from type: String, with swiftPrefix: String) -> String {
     switch type {
     case "double": return "Double"
     case "float": return "Float"
-    case "int32", "sint32", "sfixed32": return "Int32"
+    case "int32", "sint32", "sfixed32": return "Int"
     case "int64", "sint64", "sfixed64": return "Int"
-    case "uint32", "fixed32": return "UInt32"
+    case "uint32", "fixed32": return "UInt"
     case "uint64", "fixed64": return "UInt"
     case "bool": return "Bool"
     case "string": return "String"
     case "bytes": return "Data"
     case "google.protobuf.Timestamp": return "Date"
     case "google.protobuf.Duration": return "TimeInterval"
-    default: return "Blueprint\(type)" // Handle nested messages and enums if needed
+    default: return "\(swiftPrefix)\(type)" // Handle nested messages and enums if needed
     }
 }
+
 
 /// An array of primitive protocol buffer types.
 var primitiveTypes = [
    "double",
    "float",
-   "int32",
    "sint32",
    "sfixed32",
-   "int64",
    "sint64",
    "sfixed64",
-   "uint32",
    "fixed32",
-   "uint64",
    "fixed64",
    "bool",
    "string",
@@ -116,5 +110,15 @@ func readFileContents(filename: String, file: StaticString = #file) -> String? {
     } catch {
         print("Error reading file: \(error)")
         return nil
+    }
+}
+
+extension String {
+    func capitalizingFirstLetter() -> String {
+        return prefix(1).capitalized + dropFirst()
+    }
+
+    mutating func capitalizeFirstLetter() {
+        self = self.capitalizingFirstLetter()
     }
 }

@@ -5,10 +5,14 @@ import Foundation
 /// - Parameter path: The URL of the .proto file to be parsed.
 /// - Returns: A tuple containing arrays of `ProtoMessage` and `ProtoEnum`.
 /// - Throws: An error if the file cannot be read.
-internal func parseProtoFile(at path: URL) throws -> ([ProtoMessage], [ProtoEnum]) {
+internal func parseProtoFile(at path: URL, with swiftPrefix: String) throws -> ([ProtoMessage], [ProtoEnum]) {
     var content = try String(contentsOf: path)
     print("Starting parsing of messages")
-    return parseContent(&content, parent: nil)
+    return parseContent(
+        &content,
+        parent: nil,
+        with: swiftPrefix
+    )
 }
 
 /// Recursively parses the content of a protocol buffer file.
@@ -19,7 +23,8 @@ internal func parseProtoFile(at path: URL) throws -> ([ProtoMessage], [ProtoEnum
 /// - Returns: A tuple containing arrays of `ProtoMessage` and `ProtoEnum`.
 internal func parseContent(
     _ content: inout String,
-    parent: String?
+    parent: String?,
+    with swiftPrefix: String
 ) -> ([ProtoMessage], [ProtoEnum]) {
 
     var localMessages: [ProtoMessage] = []
@@ -39,7 +44,8 @@ internal func parseContent(
             &messageBody,
             &localMessages,
             &localEnums,
-            parent
+            parent,
+            swiftPrefix
         )
 
         // Remove the parsed content to avoid duplication
@@ -63,7 +69,8 @@ internal func parseContent(
             &enumBody,
             &localMessages,
             &localEnums,
-            parent
+            parent,
+            swiftPrefix
         )
 
         // Remove the parsed content to avoid duplication
@@ -89,12 +96,17 @@ internal func processEnum(
     _ body: inout String,
     _ localMessages: inout [ProtoMessage],
     _ localEnums: inout [ProtoEnum],
-    _ parent: String?
+    _ parent: String?,
+    _ prefix: String
 ) {
     print("Matched nested enum: \(name)")
     print("Nested enum body: \(body)")
 
-    let (nestedMessages, nestedEnums) = parseContent(&body, parent: name)
+    let (nestedMessages, nestedEnums) = parseContent(
+        &body,
+        parent: name,
+        with: prefix
+    )
 
     localMessages.append(contentsOf: nestedMessages)
     localEnums.append(contentsOf: nestedEnums)
@@ -122,17 +134,22 @@ internal func processMessage(
     _ body: inout String,
     _ localMessages: inout [ProtoMessage],
     _ localEnums: inout [ProtoEnum],
-    _ parent: String?
+    _ parent: String?,
+    _ prefix: String
 ) {
     print("Matched message: \(name)")
     print("Message body: \(body)")
 
-    let (nestedMessages, nestedEnums) = parseContent(&body, parent: name)
+    let (nestedMessages, nestedEnums) = parseContent(
+        &body,
+        parent: name,
+        with: prefix
+    )
 
     localMessages.append(contentsOf: nestedMessages)
     localEnums.append(contentsOf: nestedEnums)
 
-    let fields = parseMessageFields(from: body)
+    let fields = parseMessageFields(from: body, with: prefix)
 
     localMessages.append(
         ProtoMessage(
@@ -148,7 +165,7 @@ internal func processMessage(
 ///
 /// - Parameter content: The content of the message.
 /// - Returns: An array of `ProtoField` representing the fields of the message.
-internal func parseMessageFields(from content: String) -> [ProtoField] {
+internal func parseMessageFields(from content: String, with swiftPrefix: String) -> [ProtoField] {
     var fields: [ProtoField] = []
 
     // Use Swift's Regex for parsing fields
@@ -166,6 +183,7 @@ internal func parseMessageFields(from content: String) -> [ProtoField] {
         print("Matched field type: \(fieldType), field name: \(fieldName), isOptional: \(isOptional), isRepeated: \(isRepeated), isMap: \(isMap))")
         fields.append(
             ProtoField(
+                swiftPrefix: swiftPrefix,
                 name: fieldName,
                 type: fieldType,
                 comment: comment,

@@ -21,6 +21,8 @@ struct ProtoMessage {
 
 /// Represents a field within a protocol buffer message.
 struct ProtoField {
+    let swiftPrefix: String
+
     /// The name of the field.
     let name: String
     /// The type of the field.
@@ -36,29 +38,69 @@ struct ProtoField {
 
     /// The case-corrected name of the field, converted to camelCase.
     var caseCorrectName: String {
-        snakeToCamelCase(name)
-            .replacingOccurrences(of: "Url", with: "URL")
-            .replacingOccurrences(of: "Id", with: "ID")
-            .replacingOccurrences(of: "description", with: "description_p")
+        var newName = snakeToCamelCase(name)
+        if name.contains("_url") {
+            newName = newName.replacingOccurrences(of: "Url", with: "URL")
+        }
+//        if name.contains("_uri") {
+//            newName = newName.replacingOccurrences(of: "Uri", with: "URL")
+//        }
+        if name.contains("_id") {
+            newName = newName.replacingOccurrences(of: "Id", with: "ID")
+        }
+        return newName
+    }
+
+    var caseCorrectProtoName: String {
+        var newName = snakeToCamelCase(name)
+        if name.contains("_url") {
+            newName = newName.replacingOccurrences(of: "Url", with: "URL")
+        }
+        if name.contains("_uri") {
+            newName.replacingOccurrences(of: "Uri", with: "URL")
+        }
+        if name.contains("_id") {
+            newName = newName.replacingOccurrences(of: "Id", with: "ID")
+        }
+
+        if name == "description" {
+            newName = "description_p"
+        }
+        return newName
     }
 
     /// The base type of the field, mapped to Swift types.
     var caseCorrectedBaseType: String {
-        mapProtoTypeToSwift(type, isMap: isMap)
+        if isMap { // Skip map types since they are handled separately
+            let mapTypes = type
+                .dropFirst()
+                .dropLast()
+                .split(separator: ",")
+                .map {
+                    $0.trimmingCharacters(in: .whitespaces)
+                }
+
+            let keyType = swiftType(from: String(mapTypes[0]), with: swiftPrefix)
+            let valueType = swiftType(from: String(mapTypes[1]), with: swiftPrefix)
+            return "[\(keyType): \(valueType)]"
+        } else if isURL {
+            return "URL"
+        } else {
+            return swiftType(from: type, with: swiftPrefix)
+        }
+    }
+
+    var isURL: Bool {
+        (caseCorrectName.uppercased().hasSuffix("URL")
+         || caseCorrectName.uppercased().hasSuffix("URI"))
+        && type == "string"
     }
 
     /// The fully case-corrected type of the field, including optional and repeated modifiers.
     var caseCorrectedType: String {
         let caseCorrectedType = caseCorrectedBaseType
-        if isMap {
-            // Handle map fields
-            let mapTypes = type
-                .dropFirst()
-                .dropLast()
-                .split(separator: ",")
-            let keyType = mapProtoTypeToSwift(String(mapTypes[0]).trimmingCharacters(in: .whitespaces))
-            let valueType = mapProtoTypeToSwift(String(mapTypes[1]).trimmingCharacters(in: .whitespaces))
-            return "[\(keyType): \(valueType)]"
+        if isMap { // map types are handled by caseCorrectedBaseType
+            return caseCorrectedType
         } else if isRepeated {
             return "[\(caseCorrectedType)]"
         } else if isOptional {
