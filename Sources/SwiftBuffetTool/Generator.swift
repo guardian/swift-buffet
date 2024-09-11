@@ -185,7 +185,9 @@ internal func writeProperties(for message: ProtoMessage, to output: inout String
     }
 
     // Maybe add a backingData flag
+    output += "    public let _localID = UUID()"
     output += "    public private(set) var _backingData: Data?"
+
     output += "\n"
 
     return hasTimeInterval
