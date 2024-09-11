@@ -10,7 +10,7 @@ let package = Package(
         .watchOS(.v9)
     ],
     dependencies: [
-        .package(path: "../SwiftBuffet")
+        .package(path: "../")
     ],
     targets: [
         .executableTarget(
