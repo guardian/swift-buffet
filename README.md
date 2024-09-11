@@ -1,5 +1,6 @@
-# Swift Buffet
-## A Simple Protobuf Generator
+<p align="center">
+  <img src="logo.png" alt="Swift Buffet Logo" />
+</p>
 
 Swift Protobuf Generator is a Swift package that generates Swift files from Protocol Buffer (`.proto`) files. This tool can be used both as a command-line tool and as a Swift Package Manager plugin.
 
