@@ -1,7 +1,7 @@
 import Foundation
 import ArgumentParser
 
-struct ProtoSwiftTool: ParsableCommand {
+struct SwiftBuffetTool: ParsableCommand {
     @Argument(help: "The input .proto file")
     var inputProto: String
 
@@ -63,4 +63,4 @@ struct ProtoSwiftTool: ParsableCommand {
     }
 }
 
-ProtoSwiftTool.main()
+SwiftBuffetTool.main()

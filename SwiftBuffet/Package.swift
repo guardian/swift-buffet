@@ -2,7 +2,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "ProtoSwift",
+    name: "SwiftBuffet",
     platforms: [
         .macOS(.v13),
         .iOS(.v16),
@@ -10,8 +10,8 @@ let package = Package(
         .watchOS(.v9)
     ],
     products: [
-        .plugin(name: "ProtoSwiftPlugin", targets: ["ProtoSwiftPlugin"]),
-        .executable(name: "ProtoSwiftTool", targets: ["ProtoSwiftTool"])
+        .plugin(name: "SwiftBuffetPlugin", targets: ["SwiftBuffetPlugin"]),
+        .executable(name: "SwiftBuffetTool", targets: ["SwiftBuffetTool"])
     ],
     dependencies: [
         .package(
@@ -21,19 +21,19 @@ let package = Package(
     ],
     targets: [
         .plugin(
-            name: "ProtoSwiftPlugin",
+            name: "SwiftBuffetPlugin",
             capability: .buildTool(),
-            dependencies: ["ProtoSwiftTool"]
+            dependencies: ["SwiftBuffetTool"]
         ),
         .executableTarget(
-            name: "ProtoSwiftTool",
+            name: "SwiftBuffetTool",
             dependencies: [
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
         ),
         .testTarget(
-            name: "ProtoSwiftToolTests",
-            dependencies: ["ProtoSwiftTool"]
+            name: "SwiftBuffetToolTests",
+            dependencies: ["SwiftBuffetTool"]
         )
     ]
 )

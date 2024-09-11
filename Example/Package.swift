@@ -10,7 +10,7 @@ let package = Package(
         .watchOS(.v9)
     ],
     dependencies: [
-        .package(path: "../ProtoSwift")
+        .package(path: "../SwiftBuffet")
     ],
     targets: [
         .executableTarget(
@@ -19,7 +19,7 @@ let package = Package(
                 .process("example.proto")
             ],
             plugins: [
-                .plugin(name: "ProtoSwiftPlugin", package: "ProtoSwift"),
+                .plugin(name: "SwiftBuffetPlugin", package: "SwiftBuffet"),
             ]
         )
     ]

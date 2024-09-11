@@ -2,7 +2,7 @@ import PackagePlugin
 import Foundation
 
 @main
-struct ProtoSwift: BuildToolPlugin {
+struct SwiftBuffet: BuildToolPlugin {
     func createBuildCommands(context: PluginContext, target: Target) async throws -> [Command] {
         // This plugin only runs for package targets that can have source files.
         guard let sourceFiles = target.sourceModule?.sourceFiles else { return [] }
@@ -15,7 +15,7 @@ struct ProtoSwift: BuildToolPlugin {
                 commands.append(
                     .buildCommand(
                         displayName: "Generating Swift code for \(sourceFile.path.lastComponent)",
-                        executable: try context.tool(named: "ProtoSwiftTool").path,
+                        executable: try context.tool(named: "SwiftBuffetTool").path,
                         arguments: [sourceFile.path.string, outputPath.string],
                         inputFiles: [sourceFile.path],
                         outputFiles: [outputPath]
@@ -31,7 +31,7 @@ struct ProtoSwift: BuildToolPlugin {
 #if canImport(XcodeProjectPlugin)
 import XcodeProjectPlugin
 
-extension ProtoSwift: XcodeBuildToolPlugin {
+extension SwiftBuffet: XcodeBuildToolPlugin {
     func createBuildCommands(context: XcodePluginContext, target: XcodeTarget) throws -> [Command] {
         var commands: [Command] = []
 
@@ -40,7 +40,7 @@ extension ProtoSwift: XcodeBuildToolPlugin {
                 let outputPath = context.pluginWorkDirectory.appending("\(sourceFile.path.stem).swift")
                 commands.append(.buildCommand(
                     displayName: "Generating Swift code for \(sourceFile.path.lastComponent)",
-                    executable: try context.tool(named: "ProtoSwiftTool").path,
+                    executable: try context.tool(named: "SwiftBuffetTool").path,
                     arguments: [sourceFile.path.string, outputPath.string],
                     inputFiles: [sourceFile.path],
                     outputFiles: [outputPath]
