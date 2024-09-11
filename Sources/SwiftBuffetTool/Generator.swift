@@ -31,12 +31,6 @@ func generateSwiftCode(
         with: protoPrefix
     )
 
-//    if needsTimeIntervalHelper {
-//        writeTimeIntervalHelper(to: &output)
-//    }
-//
-//    writeDateFormatter(to: &output)
-
     return output
 }
 
@@ -66,7 +60,7 @@ internal func write(
             output += "    "
         }
 
-        output += "public enum \(swiftPrefix)\(protoEnum.name): Int {\n"
+        output += "public enum \(swiftPrefix)\(protoEnum.name): Int, CaseIterable, Hashable, Equatable, Sendable {\n"
 
         for (caseName, caseValue) in pair {
             if protoEnum.parentName != nil {
@@ -81,8 +75,6 @@ internal func write(
                 with: protoPrefix
             )
         }
-
-//        writeCodableInit(for: protoEnum, to: &output)
 
         if protoEnum.parentName != nil {
             output += "    }\n"
@@ -129,7 +121,7 @@ internal func write(
     var needsTimeIntervalHelper = false
 
     for message in messages.sorted(by: { $0.name < $1.name }) {
-        output += "public struct \(swiftPrefix)\(message.name) {\n"
+        output += "public struct \(swiftPrefix)\(message.name): Hashable, Equatable, Sendable {\n"
 
         let hasTimeInterval = writeProperties(
             for: message,
@@ -140,14 +132,10 @@ internal func write(
             needsTimeIntervalHelper = true
         }
 
-//        writeCodingKeys(for: message, to: &output)
-
         writeBasicInit(
             for: message,
             to: &output
         )
-
-//        writeCodableInit(for: message, to: &output)
 
         if includeProto {
             writeMessageProtoInit(
@@ -195,6 +183,10 @@ internal func writeProperties(for message: ProtoMessage, to output: inout String
             hasTimeInterval = true
         }
     }
+
+    // Maybe add a backingData flag
+    output += "    public private(set) var _backingData: Data?"
+    output += "\n"
 
     return hasTimeInterval
 }
@@ -256,6 +248,8 @@ internal func writeMessageProtoInit(for message: ProtoMessage, to output: inout 
     output += "\n    public init?(data: Data) {\n"
     output += "        if let proto = try? \(protoPrefix)\(message.name)(serializedBytes: data) {\n"
     output += "            self.init(proto: proto)\n"
+    // Backing data flag
+    output += "            self._backingData = data\n"
     output += "        } else {\n"
     output += "            return nil\n"
     output += "        }\n"
@@ -311,6 +305,9 @@ internal func writeMessageProtoInit(for message: ProtoMessage, to output: inout 
             output += "            self.\(field.caseCorrectName) = nil\n"
             output += "        }\n"
         }
+
+        // backingData flag
+        output += "        self._backingData = nil\n"
     }
     output += "    }\n"
 }
