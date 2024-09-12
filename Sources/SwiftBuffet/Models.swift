@@ -76,10 +76,7 @@ struct ProtoField {
                 .dropFirst()
                 .dropLast()
                 .split(separator: ",")
-                .map {
-                    $0.trimmingCharacters(in: .whitespaces)
-                }
-
+                .map { $0.trimmingCharacters(in: .whitespaces) }
             let keyType = swiftType(from: String(mapTypes[0]), with: swiftPrefix)
             let valueType = swiftType(from: String(mapTypes[1]), with: swiftPrefix)
             return "[\(keyType): \(valueType)]"
@@ -103,6 +100,8 @@ struct ProtoField {
             return caseCorrectedType
         } else if isRepeated {
             return "[\(caseCorrectedType)]"
+        } else if type == "bool" {
+            return "Bool" // Bools should never be optional
         } else if isOptional {
             return "\(caseCorrectedType)?"
         } else {
