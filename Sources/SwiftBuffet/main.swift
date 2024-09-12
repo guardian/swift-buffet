@@ -1,7 +1,7 @@
 import Foundation
 import ArgumentParser
 
-struct SwiftBuffetTool: ParsableCommand {
+struct SwiftBuffet: ParsableCommand {
     @Argument(help: "The input .proto file")
     var inputProto: String
 
@@ -25,6 +25,18 @@ struct SwiftBuffetTool: ParsableCommand {
         help: "The prefix to use for protobuf objects"
     )
     var protoPrefix: String = "Proto"
+
+    @Option(
+        name: .customLong("store-backing-data"),
+        help: "Keeps the data when initialised from a protobuf object"
+    )
+    var storeBackingData: Bool = false
+
+    @Option(
+        name: .customLong("use-local-ids"),
+        help: "Add a local ID to protobuf objects, can be useful in SwiftUI"
+    )
+    var useLocalIDS: Bool = true
 
     @Flag(name: .shortAndLong, help: "Show all logging")
     var verbose: Bool = false
@@ -52,6 +64,8 @@ struct SwiftBuffetTool: ParsableCommand {
             enums: enums,
             with: swiftPrefix,
             includeProto: includeProtobuf,
+            includeLocalID: useLocalIDS,
+            includeBackingData: storeBackingData,
             with: protoPrefix
         )
 
@@ -63,4 +77,4 @@ struct SwiftBuffetTool: ParsableCommand {
     }
 }
 
-SwiftBuffetTool.main()
+SwiftBuffet.main()

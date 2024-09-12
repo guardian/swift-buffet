@@ -11,7 +11,7 @@ let package = Package(
     ],
     products: [
         .plugin(name: "SwiftBuffetPlugin", targets: ["SwiftBuffetPlugin"]),
-        .executable(name: "SwiftBuffetTool", targets: ["SwiftBuffetTool"])
+        .executable(name: "SwiftBuffet", targets: ["SwiftBuffet"])
     ],
     dependencies: [
         .package(
@@ -23,17 +23,17 @@ let package = Package(
         .plugin(
             name: "SwiftBuffetPlugin",
             capability: .buildTool(),
-            dependencies: ["SwiftBuffetTool"]
+            dependencies: ["SwiftBuffet"]
         ),
         .executableTarget(
-            name: "SwiftBuffetTool",
+            name: "SwiftBuffet",
             dependencies: [
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
         ),
         .testTarget(
-            name: "SwiftBuffetToolTests",
-            dependencies: ["SwiftBuffetTool"]
+            name: "SwiftBuffetTests",
+            dependencies: ["SwiftBuffet"]
         )
     ]
 )

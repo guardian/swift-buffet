@@ -11,15 +11,19 @@ func generateSwiftCode(
     enums: [ProtoEnum],
     with swiftPrefix: String,
     includeProto: Bool,
+    includeLocalID: Bool,
+    includeBackingData: Bool,
     with protoPrefix: String
 ) -> String {
     var output = "import Foundation\n\n"
 
-    let needsTimeIntervalHelper = write(
+    write(
         messages,
         to: &output,
         with: swiftPrefix,
         includeProto: includeProto,
+        includeLocalID: includeLocalID,
+        includeBackingData: includeBackingData,
         with: protoPrefix
     )
 
@@ -112,25 +116,23 @@ internal func write(
     to output: inout String,
     with swiftPrefix: String,
     includeProto: Bool,
+    includeLocalID: Bool,
+    includeBackingData: Bool,
     with protoPrefix: String
-) -> Bool {
+) {
     if messages.isEmpty == false {
         output += "// MARK: - Structs\n"
     }
-
-    var needsTimeIntervalHelper = false
 
     for message in messages.sorted(by: { $0.name < $1.name }) {
         output += "public struct \(swiftPrefix)\(message.name): Hashable, Equatable, Sendable {\n"
 
         let hasTimeInterval = writeProperties(
             for: message,
+            includeLocalID: includeLocalID,
+            includeBackingData: includeBackingData,
             to: &output
         )
-
-        if hasTimeInterval {
-            needsTimeIntervalHelper = true
-        }
 
         writeBasicInit(
             for: message,
@@ -140,16 +142,14 @@ internal func write(
         if includeProto {
             writeMessageProtoInit(
                 for: message,
+                includeBackingData: includeBackingData,
                 to: &output,
                 with: protoPrefix
             )
         }
 
-
         output += "}\n\n"
     }
-
-    return needsTimeIntervalHelper
 }
 
 /// Adds properties to a message struct.
@@ -159,11 +159,12 @@ internal func write(
 ///   - output: A mutable string where the generated code will be appended.
 /// - Returns: A boolean indicating whether the message has a TimeInterval property.
 @discardableResult
-internal func writeProperties(for message: ProtoMessage, to output: inout String) -> Bool {
-    var hasTimeInterval = false
-
-    output += "    public let localID = UUID()\n"
-
+internal func writeProperties(
+    for message: ProtoMessage,
+    includeLocalID: Bool,
+    includeBackingData: Bool,
+    to output: inout String
+) {
     for field in message.fields {
         if let comment = field.comment {
             output += "\n"
@@ -179,18 +180,13 @@ internal func writeProperties(for message: ProtoMessage, to output: inout String
             output += "\n"
         }
         output += "    public let \(field.caseCorrectName): \(field.caseCorrectedType)\n"
-        if field.caseCorrectedType.contains("TimeInterval") {
-            hasTimeInterval = true
-        }
     }
-
-    // Maybe add a backingData flag
-    output += "    public let _localID = UUID()"
-    output += "    public private(set) var _backingData: Data?"
-
-    output += "\n"
-
-    return hasTimeInterval
+    if includeLocalID {
+        output += "    public let _localID = UUID()\n"
+    }
+    if includeBackingData {
+        output += "    public private(set) var _backingData: Data?\n"
+    }
 }
 
 /// Adds a basic initializer to a message struct.
@@ -201,12 +197,12 @@ internal func writeProperties(for message: ProtoMessage, to output: inout String
 internal func writeBasicInit(for message: ProtoMessage, to output: inout String) {
 
     func addDefaultValue(for field: ProtoField, to output: inout String) {
-        if field.isOptional {
-            output += " = nil"
-        } else if field.isRepeated {
+        if field.isRepeated {
             output += " = []"
         } else if field.type == "bool" {
             output += " = false"
+        } else if field.isOptional {
+            output += " = nil"
         }
     }
 
@@ -246,12 +242,18 @@ internal func writeBasicInit(for message: ProtoMessage, to output: inout String)
 /// - Parameters:
 ///   - message: The `ProtoMessage` to write the initializer for.
 ///   - output: A mutable string where the generated code will be appended.
-internal func writeMessageProtoInit(for message: ProtoMessage, to output: inout String, with protoPrefix: String) {
+internal func writeMessageProtoInit(
+    for message: ProtoMessage,
+    includeBackingData: Bool,
+    to output: inout String,
+    with protoPrefix: String
+) {
     output += "\n    public init?(data: Data) {\n"
     output += "        if let proto = try? \(protoPrefix)\(message.name)(serializedBytes: data) {\n"
     output += "            self.init(proto: proto)\n"
-    // Backing data flag
-    output += "            self._backingData = data\n"
+    if includeBackingData {
+        output += "            self._backingData = data\n"
+    }
     output += "        } else {\n"
     output += "            return nil\n"
     output += "        }\n"
@@ -307,9 +309,6 @@ internal func writeMessageProtoInit(for message: ProtoMessage, to output: inout 
             output += "            self.\(field.caseCorrectName) = nil\n"
             output += "        }\n"
         }
-
-        // backingData flag
-        output += "        self._backingData = nil\n"
     }
     output += "    }\n"
 }

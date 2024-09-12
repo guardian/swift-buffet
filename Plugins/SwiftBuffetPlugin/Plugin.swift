@@ -15,7 +15,7 @@ struct SwiftBuffet: BuildToolPlugin {
                 commands.append(
                     .buildCommand(
                         displayName: "Generating Swift code for \(sourceFile.path.lastComponent)",
-                        executable: try context.tool(named: "SwiftBuffetTool").path,
+                        executable: try context.tool(named: "SwiftBuffet").path,
                         arguments: [sourceFile.path.string, outputPath.string],
                         inputFiles: [sourceFile.path],
                         outputFiles: [outputPath]
@@ -40,7 +40,7 @@ extension SwiftBuffet: XcodeBuildToolPlugin {
                 let outputPath = context.pluginWorkDirectory.appending("\(sourceFile.path.stem).swift")
                 commands.append(.buildCommand(
                     displayName: "Generating Swift code for \(sourceFile.path.lastComponent)",
-                    executable: try context.tool(named: "SwiftBuffetTool").path,
+                    executable: try context.tool(named: "SwiftBuffet").path,
                     arguments: [sourceFile.path.string, outputPath.string],
                     inputFiles: [sourceFile.path],
                     outputFiles: [outputPath]

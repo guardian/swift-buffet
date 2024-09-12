@@ -1,5 +1,5 @@
 import XCTest
-@testable import SwiftBuffetTool
+@testable import SwiftBuffet
 
 final class GeneratorTests: XCTestCase {
     func testGenerateSimpleMessage() {
