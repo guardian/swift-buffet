@@ -110,7 +110,6 @@ internal func writeEnumProtoInit(for protoEnum: ProtoEnum, to output: inout Stri
 ///   - messages: An array of `ProtoMessage` to be written.
 ///   - output: A mutable string where the generated code will be appended.
 /// - Returns: A boolean indicating whether a TimeInterval helper is needed.
-@discardableResult
 internal func write(
     _ messages: [ProtoMessage],
     to output: inout String,
@@ -127,7 +126,7 @@ internal func write(
     for message in messages.sorted(by: { $0.name < $1.name }) {
         output += "public struct \(swiftPrefix)\(message.name): Hashable, Equatable, Sendable {\n"
 
-        let hasTimeInterval = writeProperties(
+        writeProperties(
             for: message,
             includeLocalID: includeLocalID,
             includeBackingData: includeBackingData,
@@ -158,7 +157,6 @@ internal func write(
 ///   - message: The `ProtoMessage` to add properties for.
 ///   - output: A mutable string where the generated code will be appended.
 /// - Returns: A boolean indicating whether the message has a TimeInterval property.
-@discardableResult
 internal func writeProperties(
     for message: ProtoMessage,
     includeLocalID: Bool,
@@ -196,16 +194,6 @@ internal func writeProperties(
 ///   - output: A mutable string where the generated code will be appended.
 internal func writeBasicInit(for message: ProtoMessage, to output: inout String) {
 
-    func addDefaultValue(for field: ProtoField, to output: inout String) {
-        if field.isRepeated {
-            output += " = []"
-        } else if field.type == "bool" {
-            output += " = false"
-        } else if field.isOptional {
-            output += " = nil"
-        }
-    }
-
     var fields = message.fields
 
     let last = fields.popLast()
@@ -217,13 +205,13 @@ internal func writeBasicInit(for message: ProtoMessage, to output: inout String)
     } else {
         for field in fields {
             output += "         \(field.caseCorrectName): \(field.caseCorrectedType)"
-            addDefaultValue(for: field, to: &output)
+            writeDefaultValue(for: field, to: &output)
             output += ",\n"
         }
 
         if let field = last {
             output += "         \(field.caseCorrectName): \(field.caseCorrectedType)"
-            addDefaultValue(for: field, to: &output)
+            writeDefaultValue(for: field, to: &output)
             output += "\n"
         }
 
@@ -306,7 +294,9 @@ internal func writeMessageProtoInit(
 
         if field.isOptional {
             output += "        } else {\n"
-            output += "            self.\(field.caseCorrectName) = nil\n"
+            output += "            self.\(field.caseCorrectName)"
+            writeDefaultValue(for: field, to: &output)
+            output += "\n"
             output += "        }\n"
         }
     }
@@ -448,4 +438,14 @@ internal func writeDateFormatter(to output: inout String) {
     output += "    formatter.formatOptions = [.withFullDate, .withFullTime, .withTimeZone]\n"
     output += "    return formatter\n"
     output += "}\n"
+}
+
+func writeDefaultValue(for field: ProtoField, to output: inout String) {
+    if field.isRepeated {
+        output += " = []"
+    } else if field.type == "bool" {
+        output += " = false"
+    } else if field.isOptional {
+        output += " = nil"
+    }
 }

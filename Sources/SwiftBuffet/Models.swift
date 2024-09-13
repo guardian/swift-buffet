@@ -56,9 +56,9 @@ struct ProtoField {
         if name.contains("_url") {
             newName = newName.replacingOccurrences(of: "Url", with: "URL")
         }
-        if name.contains("_uri") {
-            newName.replacingOccurrences(of: "Uri", with: "URL")
-        }
+//        if name.contains("_uri") {
+//            newName.replacingOccurrences(of: "Uri", with: "URL")
+//        }
         if name.contains("_id") {
             newName = newName.replacingOccurrences(of: "Id", with: "ID")
         }

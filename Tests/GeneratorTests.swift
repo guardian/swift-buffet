@@ -45,6 +45,8 @@ final class GeneratorTests: XCTestCase {
             enums: enums,
             with: "App",
             includeProto: true,
+            includeLocalID: false,
+            includeBackingData: false,
             with: "Proto"
         )
 
@@ -136,6 +138,8 @@ final class GeneratorTests: XCTestCase {
             enums: enums,
             with: "App",
             includeProto: true,
+            includeLocalID: false,
+            includeBackingData: false,
             with: "Proto"
         )
 
@@ -232,6 +236,8 @@ final class GeneratorTests: XCTestCase {
             enums: enums,
             with: "App",
             includeProto: true,
+            includeLocalID: false,
+            includeBackingData: false,
             with: "Proto"
         )
 
@@ -239,11 +245,11 @@ final class GeneratorTests: XCTestCase {
         XCTAssertTrue(generatedCode.contains("public let name: String"), "The generated code should contain the 'name' property")
         XCTAssertTrue(generatedCode.contains("public let age: Int"), "The generated code should contain the 'age' property")
         XCTAssertTrue(generatedCode.contains("public let isActive: Bool"), "The generated code should contain the 'isActive' property")
-        XCTAssertTrue(generatedCode.contains("public enum AppPerson.AppGender: Int"), "The generated code should contain the 'Gender' enum")
+        XCTAssertTrue(generatedCode.contains("public enum AppGender: Int"), "The generated code should contain the 'Gender' enum")
         XCTAssertTrue(generatedCode.contains("case unknown = 0"), "The 'Gender' enum should contain the 'unknown' case")
         XCTAssertTrue(generatedCode.contains("case male = 1"), "The 'Gender' enum should contain the 'male' case")
         XCTAssertTrue(generatedCode.contains("case female = 2"), "The 'Gender' enum should contain the 'female' case")
-        XCTAssertTrue(generatedCode.contains("public let gender: AppPerson.AppGender"), "The generated code should contain the 'gender' property")
+        XCTAssertTrue(generatedCode.contains("public let gender: AppGender"), "The generated code should contain the 'gender' property")
         XCTAssertTrue(generatedCode.contains("public let lastActive: TimeInterval"), "The generated code should contain the 'lastActive' property")
         XCTAssertTrue(generatedCode.contains("public let createdAt: Date"), "The generated code should contain the 'createdAt' property")
         XCTAssertTrue(generatedCode.contains("internal init?(proto: ProtoPerson)"), "The generated code should contain the 'init?(proto:)' method")

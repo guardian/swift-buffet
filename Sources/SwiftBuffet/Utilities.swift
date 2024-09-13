@@ -60,10 +60,7 @@ func snakeToCamelCase(_ string: String) -> String {
 /// - Parameter cases: An array of `ProtoEnumCase` to be processed.
 /// - Returns: An array of `ProtoEnumCase` with the common prefix removed and names converted to camelCase.
 func stripCommonPrefix(from cases: [ProtoEnumCase]) -> [ProtoEnumCase] {
-    guard let prefix = findCommonPrefix(in: cases.map { $0.name }) else {
-        return cases
-    }
-
+    let prefix = findCommonPrefix(in: cases.map { $0.name }) ?? ""
     return cases.map { enumCase in
         let removePrefix = enumCase.name.replacingOccurrences(of: prefix, with: "")
         let newName = snakeToCamelCase(removePrefix)
