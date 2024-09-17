@@ -35,6 +35,8 @@ struct ProtoField {
     let isRepeated: Bool
     /// Indicates if the field is a map type.
     let isMap: Bool
+    /// Indicates if the field has been marked as deprecated in the proto file.
+    let isDeprecated: Bool
 
     /// The case-corrected name of the field, converted to camelCase.
     var caseCorrectName: String {

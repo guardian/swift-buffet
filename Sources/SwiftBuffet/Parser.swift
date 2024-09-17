@@ -221,9 +221,11 @@ internal func parseMessageFields(
         let fieldModifier = match.output.3.map { String($0) }
         let fieldType = String(match.output.4)
         let fieldName = String(match.output.5)
+        let fieldOptions = match.output.6.map { String($0) }
         let isOptional = fieldModifier?.contains("optional") == true
         let isRepeated = fieldModifier?.contains("repeated") == true
         let isMap = fieldModifier?.starts(with: "map") == true
+        let isDeprecated = fieldOptions?.contains("deprecated = true") == true
         if verbose {
             print("Matched field type: \(fieldType), field name: \(fieldName), isOptional: \(isOptional), isRepeated: \(isRepeated), isMap: \(isMap))")
         }
@@ -235,7 +237,8 @@ internal func parseMessageFields(
                 comment: comment,
                 isOptional: isOptional,
                 isRepeated: isRepeated,
-                isMap: isMap
+                isMap: isMap,
+                isDeprecated: isDeprecated
             )
         )
     }
