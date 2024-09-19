@@ -8,7 +8,7 @@ let enumPattern =
 #/enum\s+(\w+)\s*\{([\s\S]*?)\n?\}/#
 
 let fieldPattern = 
-#/\s*(\/\*\*(.|\n)*?\*\/)?\s*(optional|repeated|map)?\s*(\s*<\s*\w+\s*,\s*\w+\s*>|[\w\.]+)\s+(\w+)\s*=\s*\d+;/#
+#/\s*(\/\*\*(.|\n)*?\*\/)?\s*(optional|repeated|map)?\s*(\s*<\s*\w+\s*,\s*\w+\s*>|[\w\.]+)\s+(\w+)\s*=\s*\d+\s*(\[deprecated = .*\])?;/#
 
 let enumCasePattern = 
 #/\s*(\w+)\s*=\s*(\d+);/#

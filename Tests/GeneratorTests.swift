@@ -13,7 +13,8 @@ final class GeneratorTests: XCTestCase {
                     comment: nil,
                     isOptional: false,
                     isRepeated: false,
-                    isMap: false
+                    isMap: false,
+                    isDeprecated: false
                 ),
                 ProtoField(
                     swiftPrefix: "App",
@@ -22,7 +23,8 @@ final class GeneratorTests: XCTestCase {
                     comment: nil,
                     isOptional: false,
                     isRepeated: false,
-                    isMap: false
+                    isMap: false,
+                    isDeprecated: false
                 ),
                 ProtoField(
                     swiftPrefix: "App",
@@ -31,7 +33,8 @@ final class GeneratorTests: XCTestCase {
                     comment: nil,
                     isOptional: false,
                     isRepeated: false,
-                    isMap: false
+                    isMap: false,
+                    isDeprecated: false
                 )
             ],
             parentName: nil
@@ -72,7 +75,8 @@ final class GeneratorTests: XCTestCase {
                     comment: nil,
                     isOptional: false,
                     isRepeated: false,
-                    isMap: false
+                    isMap: false,
+                    isDeprecated: false
                 ),
                 ProtoField(
                     swiftPrefix: "App",
@@ -81,7 +85,8 @@ final class GeneratorTests: XCTestCase {
                     comment: nil,
                     isOptional: false,
                     isRepeated: false,
-                    isMap: false
+                    isMap: false,
+                    isDeprecated: false
                 ),
                 ProtoField(
                     swiftPrefix: "App",
@@ -90,7 +95,8 @@ final class GeneratorTests: XCTestCase {
                     comment: nil,
                     isOptional: false,
                     isRepeated: false,
-                    isMap: false
+                    isMap: false,
+                    isDeprecated: false
                 )
             ],
             parentName: nil
@@ -106,7 +112,8 @@ final class GeneratorTests: XCTestCase {
                     comment: nil,
                     isOptional: false,
                     isRepeated: false,
-                    isMap: false
+                    isMap: false,
+                    isDeprecated: false
                 ),
                 ProtoField(
                     swiftPrefix: "App",
@@ -115,7 +122,8 @@ final class GeneratorTests: XCTestCase {
                     comment: nil,
                     isOptional: false,
                     isRepeated: false,
-                    isMap: false
+                    isMap: false,
+                    isDeprecated: false
                 ),
                 ProtoField(
                     swiftPrefix: "App",
@@ -124,7 +132,8 @@ final class GeneratorTests: XCTestCase {
                     comment: nil,
                     isOptional: false,
                     isRepeated: false,
-                    isMap: false
+                    isMap: false,
+                    isDeprecated: false
                 )
             ],
             parentName: nil
@@ -167,7 +176,8 @@ final class GeneratorTests: XCTestCase {
                     comment: nil,
                     isOptional: false,
                     isRepeated: false,
-                    isMap: false
+                    isMap: false,
+                    isDeprecated: false
                 ),
                 ProtoField(
                     swiftPrefix: "App",
@@ -176,7 +186,8 @@ final class GeneratorTests: XCTestCase {
                     comment: nil,
                     isOptional: false,
                     isRepeated: false,
-                    isMap: false
+                    isMap: false,
+                    isDeprecated: false
                 ),
                 ProtoField(
                     swiftPrefix: "App",
@@ -185,7 +196,8 @@ final class GeneratorTests: XCTestCase {
                     comment: nil,
                     isOptional: false,
                     isRepeated: false,
-                    isMap: false
+                    isMap: false,
+                    isDeprecated: false
                 ),
                 ProtoField(
                     swiftPrefix: "App",
@@ -194,7 +206,8 @@ final class GeneratorTests: XCTestCase {
                     comment: nil,
                     isOptional: false,
                     isRepeated: false,
-                    isMap: false
+                    isMap: false,
+                    isDeprecated: false
                 ),
                 ProtoField(
                     swiftPrefix: "App",
@@ -203,7 +216,8 @@ final class GeneratorTests: XCTestCase {
                     comment: nil,
                     isOptional: false,
                     isRepeated: false,
-                    isMap: false
+                    isMap: false,
+                    isDeprecated: false
                 ),
                 ProtoField(
                     swiftPrefix: "App",
@@ -212,7 +226,8 @@ final class GeneratorTests: XCTestCase {
                     comment: nil,
                     isOptional: false,
                     isRepeated: false,
-                    isMap: false
+                    isMap: false,
+                    isDeprecated: false
                 )
             ],
             parentName: nil
