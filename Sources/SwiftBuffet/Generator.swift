@@ -178,7 +178,7 @@ internal func writeProperties(
             output += "\n"
         }
         if field.isDeprecated {
-            output += #"    @available(*, deprecated, message: "This property has been marked as deprecated in the proto file")"#
+            output += #"/// This property has been marked as **deprecated** in the proto file"#
             output += "\n"
         }
         output += "    public let \(field.caseCorrectName): \(field.caseCorrectedType)\n"
