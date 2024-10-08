@@ -33,10 +33,10 @@ struct SwiftBuffet: ParsableCommand {
     var storeBackingData: Bool = false
 
     @Option(
-        name: .customLong("use-local-ids"),
-        help: "Add a local ID to protobuf objects, can be useful in SwiftUI"
+        name: .customLong("local-id-messages"),
+        help: "A list of message name describing which objects should include a local ID. This can be useful in SwiftUI"
     )
-    var useLocalIDS: Bool = true
+    var localIDMessages: [String] = []
 
     @Flag(name: .shortAndLong, help: "Show all logging")
     var verbose: Bool = false
@@ -64,7 +64,7 @@ struct SwiftBuffet: ParsableCommand {
             enums: enums,
             with: swiftPrefix,
             includeProto: includeProtobuf,
-            includeLocalID: useLocalIDS,
+            includeLocalIDFor: localIDMessages,
             includeBackingData: storeBackingData,
             with: protoPrefix
         )

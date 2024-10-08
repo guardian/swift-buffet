@@ -48,7 +48,7 @@ final class GeneratorTests: XCTestCase {
             enums: enums,
             with: "App",
             includeProto: true,
-            includeLocalID: false,
+            includeLocalIDFor: ["Person"],
             includeBackingData: false,
             with: "Proto"
         )
@@ -62,6 +62,7 @@ final class GeneratorTests: XCTestCase {
         XCTAssertTrue(generatedCode.contains("self.age = age"), "The generated code should initialize the 'age' property")
         XCTAssertTrue(generatedCode.contains("self.isActive = isActive"), "The generated code should initialize the 'isActive' property")
         XCTAssertTrue(generatedCode.contains("internal init?(proto: ProtoPerson)"), "The generated code should contain the 'init?(proto:)' method")
+        XCTAssertTrue(generatedCode.contains("public let _localID = UUID()"), "The generated code should a `localID` property")
     }
 
     func testGenerateNestedMessage() {
@@ -147,7 +148,7 @@ final class GeneratorTests: XCTestCase {
             enums: enums,
             with: "App",
             includeProto: true,
-            includeLocalID: false,
+            includeLocalIDFor: nil,
             includeBackingData: false,
             with: "Proto"
         )
@@ -251,7 +252,7 @@ final class GeneratorTests: XCTestCase {
             enums: enums,
             with: "App",
             includeProto: true,
-            includeLocalID: false,
+            includeLocalIDFor: nil,
             includeBackingData: false,
             with: "Proto"
         )
@@ -268,5 +269,62 @@ final class GeneratorTests: XCTestCase {
         XCTAssertTrue(generatedCode.contains("public let lastActive: TimeInterval"), "The generated code should contain the 'lastActive' property")
         XCTAssertTrue(generatedCode.contains("public let createdAt: Date"), "The generated code should contain the 'createdAt' property")
         XCTAssertTrue(generatedCode.contains("internal init?(proto: ProtoPerson)"), "The generated code should contain the 'init?(proto:)' method")
+    }
+
+    func testLocalIDs() {
+        let simpleMessageProtoMessage = ProtoMessage(
+            name: "Person",
+            fields: [
+                ProtoField(
+                    swiftPrefix: "App",
+                    name: "name",
+                    type: "string",
+                    comment: nil,
+                    isOptional: false,
+                    isRepeated: false,
+                    isMap: false,
+                    isDeprecated: false
+                )
+            ],
+            parentName: nil
+        )
+
+        let simpleMessageProtoMessageNoLocalID = ProtoMessage(
+            name: "Dog",
+            fields: [
+                ProtoField(
+                    swiftPrefix: "App",
+                    name: "breed",
+                    type: "string",
+                    comment: nil,
+                    isOptional: false,
+                    isRepeated: false,
+                    isMap: false,
+                    isDeprecated: false
+                )
+            ],
+            parentName: nil
+        )
+
+
+        let messages = [simpleMessageProtoMessage, simpleMessageProtoMessageNoLocalID]
+        let enums: [ProtoEnum] = []
+
+        let generatedCode = generateSwiftCode(
+            from: messages,
+            enums: enums,
+            with: "App",
+            includeProto: true,
+            includeLocalIDFor: ["Person"],
+            includeBackingData: false,
+            with: "Proto"
+        )
+
+        func containsExactlyOneInstance(of substring: String, in string: String) -> Bool {
+            let components = string.components(separatedBy: substring)
+            return components.count == 2
+        }
+
+        XCTAssert(containsExactlyOneInstance(of: "public let _localID = UUID()", in: generatedCode))
     }
 }

@@ -11,7 +11,7 @@ func generateSwiftCode(
     enums: [ProtoEnum],
     with swiftPrefix: String,
     includeProto: Bool,
-    includeLocalID: Bool,
+    includeLocalIDFor localIDMessages: [String]?,
     includeBackingData: Bool,
     with protoPrefix: String
 ) -> String {
@@ -22,7 +22,7 @@ func generateSwiftCode(
         to: &output,
         with: swiftPrefix,
         includeProto: includeProto,
-        includeLocalID: includeLocalID,
+        includeLocalIDFor: localIDMessages,
         includeBackingData: includeBackingData,
         with: protoPrefix
     )
@@ -115,7 +115,7 @@ internal func write(
     to output: inout String,
     with swiftPrefix: String,
     includeProto: Bool,
-    includeLocalID: Bool,
+    includeLocalIDFor messageNames: [String]?,
     includeBackingData: Bool,
     with protoPrefix: String
 ) {
@@ -128,7 +128,7 @@ internal func write(
 
         writeProperties(
             for: message,
-            includeLocalID: includeLocalID,
+            includeLocalID: messageNames?.contains(message.name) ?? false,
             includeBackingData: includeBackingData,
             to: &output
         )
