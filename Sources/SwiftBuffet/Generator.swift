@@ -209,13 +209,11 @@ internal func writeBasicInit(for message: ProtoMessage, to output: inout String)
     } else {
         for field in fields {
             output += "         \(field.caseCorrectName): \(field.caseCorrectedType)"
-            writeDefaultValue(for: field, to: &output)
             output += ",\n"
         }
 
         if let field = last {
             output += "         \(field.caseCorrectName): \(field.caseCorrectedType)"
-            writeDefaultValue(for: field, to: &output)
             output += "\n"
         }
 

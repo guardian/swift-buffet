@@ -3,7 +3,7 @@
 
 func run() {
     let person = Person(name: "John Doe", id: 1234, email: "john.doe@example.com")
-    let addressBook = AddressBook(people: [person])
+    let addressBook = AddressBook(people: [person], isCurrent: false)
     let address = Address(street: "Example Avenue")
 
     print("Name: \(person.name), ID: \(person.id), Email: \(person.email)")
