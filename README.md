@@ -109,10 +109,10 @@ In addition to the basic input and output paths, Swift Buffet provides several o
   }
   ```
 
-- `--use-local-ids`: This option is enabled by default and adds local IDs to the generated Swift objects, which can be particularly helpful in SwiftUI-based apps. To disable this feature:
+- `--local-id-messages`: This option allows the user to specify which, if any, messages should include local IDs in their generated Swift objects. This can be particularly helpful in SwiftUI-based apps. 
 
   ```bash
-  swift run SwiftBuffet path/to/your/file.proto path/to/your/output.swift --use-local-ids false
+  swift run SwiftBuffet path/to/your/file.proto path/to/your/output.swift --local-id-messages Person --local-id-messages Dog
   ```
 
   ```swift
