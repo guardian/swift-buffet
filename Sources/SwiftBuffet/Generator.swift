@@ -103,8 +103,13 @@ internal func writeEnumProtoInit(for protoEnum: ProtoEnum, to output: inout Stri
     } else {
         ""
     }
-    output += padding + "    internal init?(proto: \(protoPrefix)\(protoEnum.fullName)) {\n"
-    output += padding + "        self.init(rawValue: proto.rawValue)\n"
+
+    output += padding + "    internal init(proto: \(protoPrefix)\(protoEnum.fullName)) {\n"
+    output += padding + "        if let value = Self(rawValue: proto.rawValue) {\n"
+    output += padding + "            self = value\n"
+    output += padding + "        } else {\n"
+    output += padding + "            self = .unrecognized\n"
+    output += padding + "        }\n"
     output += padding + "    }\n"
 }
 
