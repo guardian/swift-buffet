@@ -14,3 +14,14 @@ message AddressBook {
 message Address {
     string street = 1 [deprecated = true];
 }
+
+message Card {
+    enum CardType {
+        CARD_TYPE_UNSPECIFIED = 0;
+        CARD_TYPE_ARTICLE = 1;
+        CARD_TYPE_PODCAST = 2;
+        CARD_TYPE_VIDEO = 3;
+        CARD_TYPE_CROSSWORD = 4;
+    }
+    CardType type = 1;
+}

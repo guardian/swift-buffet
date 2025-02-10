@@ -65,13 +65,17 @@ internal func write(
         }
 
         output += "public enum \(swiftPrefix)\(protoEnum.name): Int, CaseIterable, Hashable, Equatable, Sendable {\n"
-
+        var finalCaseValue = 0
         for (caseName, caseValue) in pair {
             if protoEnum.parentName != nil {
                 output += "    "
             }
             output += "    case \(caseName) = \(caseValue)\n"
+            finalCaseValue = caseValue
         }
+        // Add unrecognized case for backwards compatibility
+        let unrecognizedCaseValue = finalCaseValue + 1
+        output += "        case unrecognized = \(unrecognizedCaseValue)\n"
         if includeProto {
             writeEnumProtoInit(
                 for: protoEnum,
@@ -99,8 +103,13 @@ internal func writeEnumProtoInit(for protoEnum: ProtoEnum, to output: inout Stri
     } else {
         ""
     }
-    output += padding + "    internal init?(proto: \(protoPrefix)\(protoEnum.fullName)) {\n"
-    output += padding + "        self.init(rawValue: proto.rawValue)\n"
+
+    output += padding + "    internal init(proto: \(protoPrefix)\(protoEnum.fullName)) {\n"
+    output += padding + "        if let value = Self(rawValue: proto.rawValue) {\n"
+    output += padding + "            self = value\n"
+    output += padding + "        } else {\n"
+    output += padding + "            self = .unrecognized\n"
+    output += padding + "        }\n"
     output += padding + "    }\n"
 }
 
