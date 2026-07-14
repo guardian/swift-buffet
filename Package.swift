@@ -18,6 +18,10 @@ let package = Package(
             url: "https://github.com/apple/swift-argument-parser.git",
             .upToNextMajor(from: "1.5.0")
         ),
+        .package(
+            url: "https://github.com/swiftlang/swift-syntax.git",
+            "600.0.0"..<"602.0.0"
+        ),
     ],
     targets: [
         .plugin(
@@ -29,6 +33,9 @@ let package = Package(
             name: "SwiftBuffet",
             dependencies: [
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                .product(name: "SwiftSyntax", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxBuilder", package: "swift-syntax"),
+                .product(name: "SwiftParser", package: "swift-syntax"),
             ]
         ),
         .testTarget(

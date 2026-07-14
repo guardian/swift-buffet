@@ -15,6 +15,7 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "ExampleApp",
+            exclude: ["swiftbuffet.json"],
             resources: [
                 .process("example.proto")
             ],

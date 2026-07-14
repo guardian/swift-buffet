@@ -14,7 +14,7 @@ struct SwiftBuffet: ParsableCommand {
     )
     var swiftPrefix: String = ""
 
-    @Option(
+    @Flag(
         name: .customLong("include-protobuf"),
         help: "Add initialisers from protobuf objects"
     )
@@ -26,7 +26,7 @@ struct SwiftBuffet: ParsableCommand {
     )
     var protoPrefix: String = "Proto"
 
-    @Option(
+    @Flag(
         name: .customLong("store-backing-data"),
         help: "Keeps the data when initialised from a protobuf object"
     )
@@ -34,7 +34,7 @@ struct SwiftBuffet: ParsableCommand {
 
     @Option(
         name: .customLong("local-id-messages"),
-        help: "A list of message name describing which objects should include a local ID. This can be useful in SwiftUI"
+        help: "Message names that should include a generated local ID property. Useful as a stable identity in SwiftUI"
     )
     var localIDMessages: [String] = []
 
@@ -42,24 +42,23 @@ struct SwiftBuffet: ParsableCommand {
     var verbose: Bool = false
 
     @Flag(name: .shortAndLong, help: "Show no logging")
-    var quite: Bool = false
+    var quiet: Bool = false
 
     func run() throws {
         let inputURL = URL(fileURLWithPath: inputProto)
         let outputURL = URL(fileURLWithPath: outputSwift)
 
-        if quite == false {
+        if quiet == false {
             print("Processing \(inputURL)")
         }
-        
+
         let (messages, enums) = try parseProtoFile(
             at: inputURL,
             with: swiftPrefix,
-            verbose: verbose,
-            quite: quite
+            verbose: verbose
         )
        
-        let swiftCode = generateSwiftCode(
+        let swiftCode = try generateSwiftCode(
             from: messages,
             enums: enums,
             with: swiftPrefix,

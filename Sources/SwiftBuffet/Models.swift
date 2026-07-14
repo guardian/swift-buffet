@@ -6,21 +6,40 @@ struct ProtoMessage {
     let name: String
     /// The fields of the message.
     let fields: [ProtoField]
-    /// The name of the parent message, if nested.
-    let parentName: String?
+    /// The names of the enclosing messages, outermost first.
+    let parentPath: [String]
 
-    /// The full name of the message, including parent name if nested.
+    init(name: String, fields: [ProtoField], parentPath: [String]) {
+        self.name = name
+        self.fields = fields
+        self.parentPath = parentPath
+    }
+
+    /// Convenience for a message with at most one enclosing message.
+    init(name: String, fields: [ProtoField], parentName: String?) {
+        self.init(
+            name: name,
+            fields: fields,
+            parentPath: parentName.map { [$0] } ?? []
+        )
+    }
+
+    /// The name of the immediately enclosing message, if nested.
+    var parentName: String? {
+        parentPath.last
+    }
+
+    /// The fully-qualified dotted name, matching SwiftProtobuf's nesting.
     var fullName: String {
-        if let parentName {
-            return "\(parentName).\(name)"
-        } else {
-            return name
-        }
+        (parentPath + [name]).joined(separator: ".")
     }
 }
 
 /// Represents a field within a protocol buffer message.
 struct ProtoField {
+    /// The prefix applied to generated Swift type names. Stored per field so
+    /// the type-mapping properties below can prefix message and enum
+    /// references without further context.
     let swiftPrefix: String
 
     /// The name of the field.
@@ -38,33 +57,24 @@ struct ProtoField {
     /// Indicates if the field has been marked as deprecated in the proto file.
     let isDeprecated: Bool
 
-    /// The case-corrected name of the field, converted to camelCase.
+    /// The generated Swift property name: camelCase, with `Url`/`Id` from
+    /// `_url`/`_id` field names capitalized to `URL`/`ID`.
     var caseCorrectName: String {
         var newName = snakeToCamelCase(name)
         if name.contains("_url") {
             newName = newName.replacingOccurrences(of: "Url", with: "URL")
         }
-//        if name.contains("_uri") {
-//            newName = newName.replacingOccurrences(of: "Uri", with: "URL")
-//        }
         if name.contains("_id") {
             newName = newName.replacingOccurrences(of: "Id", with: "ID")
         }
         return newName
     }
 
+    /// The property name as exposed on the SwiftProtobuf-generated type.
+    /// Usually identical to `caseCorrectName`, but SwiftProtobuf escapes
+    /// names that collide with its own API (`description` → `description_p`).
     var caseCorrectProtoName: String {
-        var newName = snakeToCamelCase(name)
-        if name.contains("_url") {
-            newName = newName.replacingOccurrences(of: "Url", with: "URL")
-        }
-//        if name.contains("_uri") {
-//            newName.replacingOccurrences(of: "Uri", with: "URL")
-//        }
-        if name.contains("_id") {
-            newName = newName.replacingOccurrences(of: "Id", with: "ID")
-        }
-
+        var newName = caseCorrectName
         if name == "description" {
             newName = "description_p"
         }
@@ -73,7 +83,9 @@ struct ProtoField {
 
     /// The base type of the field, mapped to Swift types.
     var caseCorrectedBaseType: String {
-        if isMap { // Skip map types since they are handled separately
+        if isMap {
+            // Map fields store their type as "<key, value>" (see
+            // ProtoParser.parseField); unpack and map each side.
             let mapTypes = type
                 .dropFirst()
                 .dropLast()
@@ -89,10 +101,15 @@ struct ProtoField {
         }
     }
 
+    /// Whether this string field is generated as `URL` instead of `String`,
+    /// based on its name ending in URL/URI (URLS/URIS when repeated).
     var isURL: Bool {
-        (caseCorrectName.uppercased().hasSuffix("URL")
-         || caseCorrectName.uppercased().hasSuffix("URI"))
-        && type == "string"
+        guard type == "string" else {
+            return false
+        }
+        let upperName = caseCorrectName.uppercased()
+        let suffixes = isRepeated ? ["URLS", "URIS"] : ["URL", "URI"]
+        return suffixes.contains(where: upperName.hasSuffix)
     }
 
     /// The fully case-corrected type of the field, including optional and repeated modifiers.
@@ -119,6 +136,11 @@ struct ProtoField {
             return primitiveTypes.contains(type)
         }
     }
+
+    /// Indicates if the field is a proto integer type (signed or unsigned).
+    var isIntType: Bool {
+        signedIntTypes.contains(type) || unsignedIntTypes.contains(type)
+    }
 }
 
 /// Represents a protocol buffer enum.
@@ -127,16 +149,32 @@ struct ProtoEnum {
     let name: String
     /// The cases of the enum.
     let cases: [ProtoEnumCase]
-    /// The name of the parent message, if any.
-    let parentName: String?
+    /// The names of the enclosing messages, outermost first.
+    let parentPath: [String]
 
-    /// The full name of the enum, including parent name if present.
+    init(name: String, cases: [ProtoEnumCase], parentPath: [String]) {
+        self.name = name
+        self.cases = cases
+        self.parentPath = parentPath
+    }
+
+    /// Convenience for an enum with at most one enclosing message.
+    init(name: String, cases: [ProtoEnumCase], parentName: String?) {
+        self.init(
+            name: name,
+            cases: cases,
+            parentPath: parentName.map { [$0] } ?? []
+        )
+    }
+
+    /// The name of the immediately enclosing message, if nested.
+    var parentName: String? {
+        parentPath.last
+    }
+
+    /// The fully-qualified dotted name, matching SwiftProtobuf's nesting.
     var fullName: String {
-        if let parentName {
-            return "\(parentName).\(name)"
-        } else {
-            return name
-        }
+        (parentPath + [name]).joined(separator: ".")
     }
 }
 
