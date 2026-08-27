@@ -327,4 +327,127 @@ final class GeneratorTests: XCTestCase {
 
         XCTAssert(containsExactlyOneInstance(of: "public let _localID = UUID()", in: generatedCode))
     }
+
+    /// Enums should gain a synthetic `unrecognized` case with a non-failable `init(proto:)`
+    /// that falls back to `.unrecognized` for any raw value it doesn't recognize, so that
+    /// new proto cases added server-side don't break older clients. This intentionally
+    /// mirrors SwiftProtobuf's own `.UNRECOGNIZED(rawValue)` convention, rather than
+    /// conflating it with a proto-defined "unspecified" zero case.
+    func testEnumUnrecognizedCaseFallback() {
+        let statusProtoEnum = ProtoEnum(
+            name: "Status",
+            cases: [
+                ProtoEnumCase(name: "STATUS_ACTIVE", value: 0),
+                ProtoEnumCase(name: "STATUS_INACTIVE", value: 1)
+            ],
+            parentName: nil
+        )
+
+        let generatedCode = generateSwiftCode(
+            from: [],
+            enums: [statusProtoEnum],
+            with: "App",
+            includeProto: true,
+            includeLocalIDFor: nil,
+            includeBackingData: false,
+            with: "Proto"
+        )
+
+        XCTAssertTrue(generatedCode.contains("case active = 0"), "The enum should contain the 'active' case")
+        XCTAssertTrue(generatedCode.contains("case inactive = 1"), "The enum should contain the 'inactive' case")
+        XCTAssertTrue(generatedCode.contains("case unrecognized = 9999"), "The enum should gain a synthetic 'unrecognized' fallback case")
+        XCTAssertTrue(generatedCode.contains("internal init(proto: ProtoStatus)"), "The proto initializer should be non-failable")
+        XCTAssertFalse(generatedCode.contains("internal init?(proto: ProtoStatus)"), "The proto initializer should not be failable")
+        XCTAssertTrue(generatedCode.contains("self = .unrecognized"), "Unrecognized raw values should fall back to '.unrecognized'")
+        XCTAssertTrue(generatedCode.contains("Self(rawValue: proto.rawValue)"), "The fallback check should use 'Self(rawValue:)' rather than a nested 'self.init' delegation, which fails to compile inside a non-failable initializer")
+    }
+
+    /// A proto enum could conceivably declare its own case that already strips down to
+    /// `unrecognized`. In that case the generator must not also emit a synthetic
+    /// `case unrecognized`, or the enum fails to compile due to a duplicate case name.
+    func testEnumWithExistingUnrecognizedCaseAvoidsDuplicateCase() {
+        let statusProtoEnum = ProtoEnum(
+            name: "Status",
+            cases: [
+                ProtoEnumCase(name: "STATUS_UNRECOGNIZED", value: 0),
+                ProtoEnumCase(name: "STATUS_ACTIVE", value: 1),
+                ProtoEnumCase(name: "STATUS_INACTIVE", value: 2)
+            ],
+            parentName: nil
+        )
+
+        let generatedCode = generateSwiftCode(
+            from: [],
+            enums: [statusProtoEnum],
+            with: "App",
+            includeProto: true,
+            includeLocalIDFor: nil,
+            includeBackingData: false,
+            with: "Proto"
+        )
+
+        XCTAssertTrue(generatedCode.contains("case unrecognized = 0"), "The pre-existing 'unrecognized' case should be preserved")
+        let occurrences = generatedCode.components(separatedBy: "case unrecognized").count - 1
+        XCTAssertEqual(occurrences, 1, "There should be exactly one 'unrecognized' case, not a duplicate synthetic one")
+        XCTAssertFalse(generatedCode.contains("case unrecognized = 9999"), "No synthetic 'unrecognized' case should be added when one already exists")
+    }
+
+    /// Regression test: a message with a non-optional field of an enum type must still
+    /// produce code that compiles. Enums now have a non-failable `init(proto:)` while
+    /// messages keep a failable one, so the shared "if let x = Type(proto:) {...}"
+    /// pattern needs the "as Type?" cast to remain valid for both — without it, this
+    /// fails with "Initializer for conditional binding must have Optional type".
+    func testMessageWithNonOptionalEnumFieldUsesOptionalCast() {
+        let statusProtoEnum = ProtoEnum(
+            name: "Status",
+            cases: [
+                ProtoEnumCase(name: "STATUS_UNKNOWN", value: 0),
+                ProtoEnumCase(name: "STATUS_ACTIVE", value: 1),
+                ProtoEnumCase(name: "STATUS_INACTIVE", value: 2)
+            ],
+            parentName: nil
+        )
+
+        let accountProtoMessage = ProtoMessage(
+            name: "Account",
+            fields: [
+                ProtoField(
+                    swiftPrefix: "App",
+                    name: "name",
+                    type: "string",
+                    comment: nil,
+                    isOptional: false,
+                    isRepeated: false,
+                    isMap: false,
+                    isDeprecated: false
+                ),
+                ProtoField(
+                    swiftPrefix: "App",
+                    name: "status",
+                    type: "Status",
+                    comment: nil,
+                    isOptional: false,
+                    isRepeated: false,
+                    isMap: false,
+                    isDeprecated: false
+                )
+            ],
+            parentName: nil
+        )
+
+        let generatedCode = generateSwiftCode(
+            from: [accountProtoMessage],
+            enums: [statusProtoEnum],
+            with: "App",
+            includeProto: true,
+            includeLocalIDFor: nil,
+            includeBackingData: false,
+            with: "Proto"
+        )
+
+        XCTAssertTrue(
+            generatedCode.contains("if let status = AppStatus(proto: proto.status) as AppStatus? {"),
+            "A non-optional enum-typed field must use an 'as Type?' cast so the binding compiles whether the nested init is failable (messages) or not (enums)"
+        )
+    }
 }
