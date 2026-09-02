@@ -72,6 +72,21 @@ internal func write(
             }
             output += "    case \(caseName) = \(caseValue)\n"
         }
+
+        // Many proto3 enums already declare their own zero-value "unspecified"/"unknown"
+        // case, which is semantically different from an *unrecognized* raw value (one
+        // the client doesn't know about, e.g. because it was added server-side after the
+        // client shipped). Only add the synthetic fallback case if one doesn't already
+        // exist, otherwise we'd generate a duplicate case name and fail to compile.
+        let hasUnrecognizedCase = strippedCases.contains { $0.name == "unrecognized" }
+        if hasUnrecognizedCase == false {
+            if protoEnum.parentName != nil {
+                output += "    "
+            }
+            // I assume we wont be hitting any real enums with this many cases
+            output += "    case unrecognized = 9999\n"
+        }
+
         if includeProto {
             writeEnumProtoInit(
                 for: protoEnum,
@@ -92,15 +107,23 @@ internal func write(
 /// - Parameters:
 ///   - protoEnum: The `ProtoEnum` to write the initializer for.
 ///   - output: A mutable string where the generated code will be appended.
-internal func writeEnumProtoInit(for protoEnum: ProtoEnum, to output: inout String, with protoPrefix: String) {
+internal func writeEnumProtoInit(
+    for protoEnum: ProtoEnum,
+    to output: inout String,
+    with protoPrefix: String
+) {
     output += "\n"
     let padding = if protoEnum.parentName != nil {
         "    "
     } else {
         ""
     }
-    output += padding + "    internal init?(proto: \(protoPrefix)\(protoEnum.fullName)) {\n"
-    output += padding + "        self.init(rawValue: proto.rawValue)\n"
+    output += padding + "    internal init(proto: \(protoPrefix)\(protoEnum.fullName)) {\n"
+    output += padding + "        if let value = Self(rawValue: proto.rawValue) {\n"
+    output += padding + "            self = value\n"
+    output += padding + "        } else {\n"
+    output += padding + "            self = .unrecognized\n"
+    output += padding + "        }\n"
     output += padding + "    }\n"
 }
 
@@ -285,7 +308,10 @@ internal func writeMessageProtoInit(
         } else if field.isPrimitiveType {
             output += "        self.\(field.caseCorrectName) = proto.\(field.caseCorrectProtoName)\n"
         } else if field.isOptional == false {
-            output += "        if let \(field.caseCorrectName) = \(field.caseCorrectedBaseType)(proto: proto.\(field.caseCorrectProtoName)) {\n"
+            // The "as \(field.caseCorrectedBaseType)?" cast keeps this valid whether the
+            // nested type's `init(proto:)` is failable (messages) or not (enums, which
+            // now always succeed and fall back to `.unrecognized`).
+            output += "        if let \(field.caseCorrectName) = \(field.caseCorrectedBaseType)(proto: proto.\(field.caseCorrectProtoName)) as \(field.caseCorrectedBaseType)? {\n"
             output += "            self.\(field.caseCorrectName) = \(field.caseCorrectProtoName)\n"
             output += "        } else {\n"
             output += "            return nil\n"
