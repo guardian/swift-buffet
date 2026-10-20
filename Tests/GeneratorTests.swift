@@ -450,4 +450,80 @@ final class GeneratorTests: XCTestCase {
             "A non-optional enum-typed field must use an 'as Type?' cast so the binding compiles whether the nested init is failable (messages) or not (enums)"
         )
     }
+
+    /// `oneof` fields are mutually exclusive, so they should be generated as a single
+    /// optional enum property (one case per member) rather than as several
+    /// independent, non-optional struct properties.
+    func testGenerateMessageWithOneof() {
+        let contentOneof = ProtoOneof(
+            name: "content",
+            fields: [
+                ProtoField(
+                    swiftPrefix: "App",
+                    name: "image",
+                    type: "Image",
+                    comment: nil,
+                    isOptional: false,
+                    isRepeated: false,
+                    isMap: false,
+                    isDeprecated: false
+                ),
+                ProtoField(
+                    swiftPrefix: "App",
+                    name: "video",
+                    type: "Video",
+                    comment: nil,
+                    isOptional: false,
+                    isRepeated: false,
+                    isMap: false,
+                    isDeprecated: false
+                )
+            ]
+        )
+
+        let slideProtoMessage = ProtoMessage(
+            name: "MultimediaSlide",
+            fields: [
+                ProtoField(
+                    swiftPrefix: "App",
+                    name: "label",
+                    type: "string",
+                    comment: nil,
+                    isOptional: true,
+                    isRepeated: false,
+                    isMap: false,
+                    isDeprecated: false
+                )
+            ],
+            parentName: nil,
+            oneofs: [contentOneof]
+        )
+
+        let generatedCode = generateSwiftCode(
+            from: [slideProtoMessage],
+            enums: [],
+            with: "App",
+            includeProto: true,
+            includeLocalIDFor: nil,
+            includeBackingData: false,
+            with: "Proto"
+        )
+
+        XCTAssertTrue(generatedCode.contains("public enum AppMultimediaSlideContent: Hashable, Equatable, Sendable {"), "The generated code should contain the 'AppMultimediaSlideContent' enum")
+        XCTAssertTrue(generatedCode.contains("case image(AppImage)"), "The oneof enum should contain the 'image' case")
+        XCTAssertTrue(generatedCode.contains("case video(AppVideo)"), "The oneof enum should contain the 'video' case")
+
+        XCTAssertTrue(generatedCode.contains("public let content: AppMultimediaSlideContent?"), "The message struct should contain an optional 'content' property of the oneof enum type")
+        XCTAssertTrue(generatedCode.contains("public let label: String?"), "The message struct should still contain its regular 'label' property")
+
+        XCTAssertFalse(generatedCode.contains("public let image:"), "Oneof member fields should not also be generated as independent struct properties")
+        XCTAssertFalse(generatedCode.contains("public let video:"), "Oneof member fields should not also be generated as independent struct properties")
+
+        XCTAssertTrue(generatedCode.contains("internal init?(proto: ProtoMultimediaSlide.OneOf_Content)"), "The oneof enum should have a failable initializer from the generated protobuf 'OneOf_Content' enum")
+        XCTAssertTrue(generatedCode.contains("case .image(let value):"), "The proto initializer should switch over the proto's 'image' case")
+        XCTAssertTrue(generatedCode.contains("case .video(let value):"), "The proto initializer should switch over the proto's 'video' case")
+
+        XCTAssertTrue(generatedCode.contains("if let contentProto = proto.content {"), "The message's proto initializer should read the raw oneof value from the proto")
+        XCTAssertTrue(generatedCode.contains("if let content = AppMultimediaSlideContent(proto: contentProto) {"), "The message's proto initializer should convert the raw oneof value using the generated enum's initializer")
+    }
 }

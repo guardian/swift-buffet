@@ -181,6 +181,13 @@ internal func processMessage(
     localMessages.append(contentsOf: nestedMessages)
     localEnums.append(contentsOf: nestedEnums)
 
+    let oneofs = parseOneofs(
+        &body,
+        with: prefix,
+        verbose: verbose,
+        quite: quite
+    )
+
     let fields = parseMessageFields(
         from: body,
         with: prefix,
@@ -192,11 +199,64 @@ internal func processMessage(
         ProtoMessage(
             name: name,
             fields: fields,
-            parentName: parent
+            parentName: parent,
+            oneofs: oneofs
         )
     )
 }
 
+
+/// Parses and removes `oneof` blocks from a message body, returning the extracted
+/// oneofs. This runs before `parseMessageFields` so a oneof's member fields are
+/// represented once, as part of its `ProtoOneof`, rather than also being matched as
+/// independent top-level fields by the field-matching regex.
+///
+/// - Parameters:
+///   - body: The message body to parse; matched oneof blocks are removed from it.
+/// - Returns: An array of `ProtoOneof` representing the oneof blocks found.
+internal func parseOneofs(
+    _ body: inout String,
+    with swiftPrefix: String,
+    verbose: Bool,
+    quite: Bool
+) -> [ProtoOneof] {
+    var oneofs: [ProtoOneof] = []
+
+    let oneofMatches = body.matches(of: oneofPattern)
+    for match in oneofMatches {
+        let oneofName = String(match.1)
+        let oneofBody = String(match.2)
+
+        if quite == false {
+            print("Matched oneof: \(oneofName)")
+        }
+        if verbose == true {
+            print("Matched oneof body: \(oneofBody)")
+        }
+
+        let fields = parseMessageFields(
+            from: oneofBody,
+            with: swiftPrefix,
+            verbose: verbose,
+            quite: quite
+        )
+
+        oneofs.append(
+            ProtoOneof(
+                name: oneofName,
+                fields: fields
+            )
+        )
+
+        // Remove the parsed content to avoid it also being matched as a regular field.
+        body = body.replacingOccurrences(
+            of: String(match.0),
+            with: ""
+        )
+    }
+
+    return oneofs
+}
 
 /// Parses the fields of a protocol buffer message.
 ///

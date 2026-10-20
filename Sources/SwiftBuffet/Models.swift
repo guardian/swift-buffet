@@ -8,6 +8,11 @@ struct ProtoMessage {
     let fields: [ProtoField]
     /// The name of the parent message, if nested.
     let parentName: String?
+    /// The `oneof` blocks declared directly within the message. A oneof's member
+    /// fields are mutually exclusive, so they're represented separately from
+    /// `fields` and generated as a single enum rather than independent optional
+    /// properties.
+    var oneofs: [ProtoOneof] = []
 
     /// The full name of the message, including parent name if nested.
     var fullName: String {
@@ -40,35 +45,14 @@ struct ProtoField {
 
     /// The case-corrected name of the field, converted to camelCase.
     var caseCorrectName: String {
-        var newName = snakeToCamelCase(name)
-        if name.contains("_url") {
-            newName = newName.replacingOccurrences(of: "Url", with: "URL")
-        }
-//        if name.contains("_uri") {
-//            newName = newName.replacingOccurrences(of: "Uri", with: "URL")
-//        }
-        if name.contains("_id") {
-            newName = newName.replacingOccurrences(of: "Id", with: "ID")
-        }
-        return newName
+        caseCorrectIdentifier(name)
     }
 
     var caseCorrectProtoName: String {
-        var newName = snakeToCamelCase(name)
-        if name.contains("_url") {
-            newName = newName.replacingOccurrences(of: "Url", with: "URL")
-        }
-//        if name.contains("_uri") {
-//            newName.replacingOccurrences(of: "Uri", with: "URL")
-//        }
-        if name.contains("_id") {
-            newName = newName.replacingOccurrences(of: "Id", with: "ID")
-        }
-
         if name == "description" {
-            newName = "description_p"
+            return "description_p"
         }
-        return newName
+        return caseCorrectIdentifier(name)
     }
 
     /// The base type of the field, mapped to Swift types.
@@ -118,6 +102,30 @@ struct ProtoField {
         } else {
             return primitiveTypes.contains(type)
         }
+    }
+}
+
+/// Represents a `oneof` block within a protocol buffer message. A oneof's member
+/// fields are mutually exclusive — at most one can be set at a time — so unlike
+/// regular fields, they're generated as a single Swift enum with one case per
+/// member, rather than as independent optional properties.
+struct ProtoOneof {
+    /// The name of the oneof block (e.g. `content`).
+    let name: String
+    /// The member fields declared inside the oneof block.
+    let fields: [ProtoField]
+
+    /// The case-corrected name of the oneof, converted to camelCase.
+    var caseCorrectName: String {
+        caseCorrectIdentifier(name)
+    }
+
+    /// The case-corrected name used to access the oneof's generated proto property.
+    var caseCorrectProtoName: String {
+        if name == "description" {
+            return "description_p"
+        }
+        return caseCorrectIdentifier(name)
     }
 }
 

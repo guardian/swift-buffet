@@ -140,4 +140,48 @@ final class ParserTests: XCTestCase {
         XCTAssertFalse(createdAtField.isRepeated, "Expected field to be non-repeated")
         XCTAssertFalse(createdAtField.isMap, "Expected field to be non-map")
     }
+
+    /// `oneof` member fields are mutually exclusive, so the parser must extract them
+    /// into a separate `ProtoOneof` rather than letting them also be matched as
+    /// ordinary top-level fields by the field-matching regex.
+    func testParseMessageWithOneof() throws {
+        var protoFileContent = """
+        syntax = "proto3";
+
+        message MultimediaSlide {
+          oneof content {
+            Image image = 1;
+            Video video = 2;
+          }
+          optional string label = 3;
+        }
+        """
+
+        let (messages, enums) = parseContent(
+            &protoFileContent,
+            parent: nil,
+            with: "MyApp",
+            verbose: false,
+            quite: true
+        )
+
+        XCTAssertEqual(messages.count, 1, "Expected to find 1 message, but got \(messages.count)")
+        XCTAssertEqual(enums.count, 0, "Expected to find 0 enums, but got \(enums.count)")
+
+        let slideMessage = messages.first!
+        XCTAssertEqual(slideMessage.fields.count, 1, "The oneof's member fields should not also be parsed as top-level fields")
+        XCTAssertEqual(slideMessage.fields.first?.name, "label", "The only top-level field should be 'label'")
+
+        XCTAssertEqual(slideMessage.oneofs.count, 1, "Expected to find 1 oneof, but got \(slideMessage.oneofs.count)")
+        let contentOneof = slideMessage.oneofs.first!
+        XCTAssertEqual(contentOneof.name, "content", "Expected oneof name to be 'content', but got '\(contentOneof.name)'")
+        XCTAssertEqual(contentOneof.fields.count, 2, "Expected 2 member fields in the oneof, but got \(contentOneof.fields.count)")
+
+        let imageField = contentOneof.fields.first { $0.name == "image" }!
+        XCTAssertEqual(imageField.type, "Image", "Expected field type to be 'Image', but got '\(imageField.type)'")
+        XCTAssertFalse(imageField.isOptional, "Oneof member fields should not themselves be marked optional")
+
+        let videoField = contentOneof.fields.first { $0.name == "video" }!
+        XCTAssertEqual(videoField.type, "Video", "Expected field type to be 'Video', but got '\(videoField.type)'")
+    }
 }

@@ -147,17 +147,30 @@ internal func write(
     }
 
     for message in messages.sorted(by: { $0.name < $1.name }) {
+        for oneof in message.oneofs {
+            writeOneofEnum(
+                oneof,
+                in: message,
+                to: &output,
+                with: swiftPrefix,
+                includeProto: includeProto,
+                with: protoPrefix
+            )
+        }
+
         output += "public struct \(swiftPrefix)\(message.name): Hashable, Equatable, Sendable {\n"
 
         writeProperties(
             for: message,
             includeLocalID: messageNames?.contains(message.name) ?? false,
             includeBackingData: includeBackingData,
+            with: swiftPrefix,
             to: &output
         )
 
         writeBasicInit(
             for: message,
+            with: swiftPrefix,
             to: &output
         )
 
@@ -166,11 +179,97 @@ internal func write(
                 for: message,
                 includeBackingData: includeBackingData,
                 to: &output,
+                with: swiftPrefix,
                 with: protoPrefix
             )
         }
 
         output += "}\n\n"
+    }
+}
+
+/// Builds the Swift type name for the enum generated for a `oneof` block.
+///
+/// - Parameters:
+///   - oneof: The oneof to build a type name for.
+///   - message: The message the oneof is declared within.
+///   - swiftPrefix: The prefix used for all generated Swift types.
+/// - Returns: The Swift type name, e.g. `AppMultimediaSlideContent`.
+internal func oneofTypeName(for oneof: ProtoOneof, in message: ProtoMessage, with swiftPrefix: String) -> String {
+    "\(swiftPrefix)\(message.name)\(oneof.caseCorrectName.capitalizingFirstLetter())"
+}
+
+/// Builds the fully-qualified protobuf type name for a `oneof`'s generated enum, as
+/// produced by `protoc-gen-swift` (e.g. `ProtoMultimediaSlide.OneOf_Content`).
+internal func protoOneofTypeName(for oneof: ProtoOneof, in message: ProtoMessage, with protoPrefix: String) -> String {
+    "\(protoPrefix)\(message.name).OneOf_\(oneof.caseCorrectName.capitalizingFirstLetter())"
+}
+
+/// Writes the Swift enum generated for a single `oneof` block, along with (when
+/// `includeProto` is enabled) a failable initializer that converts from the
+/// corresponding protobuf-generated `OneOf_*` enum.
+///
+/// - Parameters:
+///   - oneof: The oneof to write.
+///   - message: The message the oneof is declared within.
+///   - output: A mutable string where the generated code will be appended.
+internal func writeOneofEnum(
+    _ oneof: ProtoOneof,
+    in message: ProtoMessage,
+    to output: inout String,
+    with swiftPrefix: String,
+    includeProto: Bool,
+    with protoPrefix: String
+) {
+    let typeName = oneofTypeName(for: oneof, in: message, with: swiftPrefix)
+
+    output += "public enum \(typeName): Hashable, Equatable, Sendable {\n"
+    for field in oneof.fields {
+        output += "    case \(field.caseCorrectName)(\(field.caseCorrectedBaseType))\n"
+    }
+
+    if includeProto {
+        output += "\n"
+        output += "    internal init?(proto: \(protoOneofTypeName(for: oneof, in: message, with: protoPrefix))) {\n"
+        output += "        switch proto {\n"
+        for field in oneof.fields {
+            output += "        case .\(field.caseCorrectProtoName)(let value):\n"
+            writeOneofCaseConversion(for: field, to: &output)
+        }
+        output += "        }\n"
+        output += "    }\n"
+    }
+
+    output += "}\n\n"
+}
+
+/// Writes the body that converts a single `oneof` member's raw proto payload (bound
+/// to `value`) into the matching case of our own generated enum.
+///
+/// - Parameters:
+///   - field: The oneof member field being converted.
+///   - output: A mutable string where the generated code will be appended.
+internal func writeOneofCaseConversion(for field: ProtoField, to output: inout String) {
+    if field.caseCorrectedBaseType == "TimeInterval" {
+        output += "            self = .\(field.caseCorrectName)(value.timeInterval)\n"
+    } else if field.caseCorrectedBaseType == "Date" {
+        output += "            self = .\(field.caseCorrectName)(value.date)\n"
+    } else if field.isURL {
+        output += "            if let url = URL(string: value) {\n"
+        output += "                self = .\(field.caseCorrectName)(url)\n"
+        output += "            } else {\n"
+        output += "                return nil\n"
+        output += "            }\n"
+    } else if field.type.contains("int") {
+        output += "            self = .\(field.caseCorrectName)(Int(exactly: value)!)\n"
+    } else if field.isPrimitiveType {
+        output += "            self = .\(field.caseCorrectName)(value)\n"
+    } else {
+        output += "            if let converted = \(field.caseCorrectedBaseType)(proto: value) as \(field.caseCorrectedBaseType)? {\n"
+        output += "                self = .\(field.caseCorrectName)(converted)\n"
+        output += "            } else {\n"
+        output += "                return nil\n"
+        output += "            }\n"
     }
 }
 
@@ -184,6 +283,7 @@ internal func writeProperties(
     for message: ProtoMessage,
     includeLocalID: Bool,
     includeBackingData: Bool,
+    with swiftPrefix: String,
     to output: inout String
 ) {
     for field in message.fields {
@@ -206,6 +306,9 @@ internal func writeProperties(
         }
         output += "    public let \(field.caseCorrectName): \(field.caseCorrectedType)\n"
     }
+    for oneof in message.oneofs {
+        output += "    public let \(oneof.caseCorrectName): \(oneofTypeName(for: oneof, in: message, with: swiftPrefix))?\n"
+    }
     if includeLocalID {
         output += "    public let _localID = UUID()\n"
     }
@@ -219,24 +322,29 @@ internal func writeProperties(
 /// - Parameters:
 ///   - message: The `ProtoMessage` to add the initializer for.
 ///   - output: A mutable string where the generated code will be appended.
-internal func writeBasicInit(for message: ProtoMessage, to output: inout String) {
+internal func writeBasicInit(for message: ProtoMessage, with swiftPrefix: String, to output: inout String) {
 
-    var fields = message.fields
+    var params: [(name: String, type: String)] = message.fields.map {
+        ($0.caseCorrectName, $0.caseCorrectedType)
+    }
+    params += message.oneofs.map {
+        ($0.caseCorrectName, "\(oneofTypeName(for: $0, in: message, with: swiftPrefix))?")
+    }
 
-    let last = fields.popLast()
+    let last = params.popLast()
     
     output += "\n    public init(\n"
 
     if last == nil {
         output += ") {\n"
     } else {
-        for field in fields {
-            output += "         \(field.caseCorrectName): \(field.caseCorrectedType)"
+        for param in params {
+            output += "         \(param.name): \(param.type)"
             output += ",\n"
         }
 
-        if let field = last {
-            output += "         \(field.caseCorrectName): \(field.caseCorrectedType)"
+        if let param = last {
+            output += "         \(param.name): \(param.type)"
             output += "\n"
         }
 
@@ -245,6 +353,9 @@ internal func writeBasicInit(for message: ProtoMessage, to output: inout String)
 
     for field in message.fields {
         output += "        self.\(field.caseCorrectName) = \(field.caseCorrectName)\n"
+    }
+    for oneof in message.oneofs {
+        output += "        self.\(oneof.caseCorrectName) = \(oneof.caseCorrectName)\n"
     }
 
     output += "    }\n"
@@ -259,6 +370,7 @@ internal func writeMessageProtoInit(
     for message: ProtoMessage,
     includeBackingData: Bool,
     to output: inout String,
+    with swiftPrefix: String,
     with protoPrefix: String
 ) {
     output += "\n    public init?(data: Data) {\n"
@@ -327,6 +439,18 @@ internal func writeMessageProtoInit(
             output += "\n"
             output += "        }\n"
         }
+    }
+    for oneof in message.oneofs {
+        let enumName = oneofTypeName(for: oneof, in: message, with: swiftPrefix)
+        output += "        if let \(oneof.caseCorrectName)Proto = proto.\(oneof.caseCorrectProtoName) {\n"
+        output += "            if let \(oneof.caseCorrectName) = \(enumName)(proto: \(oneof.caseCorrectName)Proto) {\n"
+        output += "                self.\(oneof.caseCorrectName) = \(oneof.caseCorrectName)\n"
+        output += "            } else {\n"
+        output += "                return nil\n"
+        output += "            }\n"
+        output += "        } else {\n"
+        output += "            self.\(oneof.caseCorrectName) = nil\n"
+        output += "        }\n"
     }
     output += "    }\n"
 }

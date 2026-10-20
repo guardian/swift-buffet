@@ -39,6 +39,23 @@ var primitiveTypes = [
    "bytes"
 ]
 
+/// Applies SwiftBuffet's standard snake_case -> camelCase conversion, along with the
+/// `_url`/`_id` suffix corrections shared by fields, oneofs, and their proto
+/// counterparts.
+///
+/// - Parameter name: The raw snake_case identifier from the `.proto` file.
+/// - Returns: The case-corrected camelCase identifier.
+func caseCorrectIdentifier(_ name: String) -> String {
+    var newName = snakeToCamelCase(name)
+    if name.contains("_url") {
+        newName = newName.replacingOccurrences(of: "Url", with: "URL")
+    }
+    if name.contains("_id") {
+        newName = newName.replacingOccurrences(of: "Id", with: "ID")
+    }
+    return newName
+}
+
 /// Converts a snake_case string to camelCase.
 ///
 /// - Parameter string: The snake_case string to be converted.
