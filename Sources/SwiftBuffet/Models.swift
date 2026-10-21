@@ -103,6 +103,15 @@ struct ProtoField {
             return primitiveTypes.contains(type)
         }
     }
+
+    /// Indicates if the field maps to a Swift integer type (`Int`/`UInt`).
+    var isIntegerType: Bool {
+        if isMap {
+            return false
+        } else {
+            return integerProtoTypes.contains(type)
+        }
+    }
 }
 
 /// Represents a `oneof` block within a protocol buffer message. A oneof's member

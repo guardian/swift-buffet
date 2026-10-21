@@ -147,17 +147,6 @@ internal func write(
     }
 
     for message in messages.sorted(by: { $0.name < $1.name }) {
-        for oneof in message.oneofs {
-            writeOneofEnum(
-                oneof,
-                in: message,
-                to: &output,
-                with: swiftPrefix,
-                includeProto: includeProto,
-                with: protoPrefix
-            )
-        }
-
         output += "public struct \(swiftPrefix)\(message.name): Hashable, Equatable, Sendable {\n"
 
         writeProperties(
@@ -185,18 +174,42 @@ internal func write(
         }
 
         output += "}\n\n"
+
+        for oneof in message.oneofs {
+            writeOneofEnum(
+                oneof,
+                in: message,
+                to: &output,
+                with: swiftPrefix,
+                includeProto: includeProto,
+                with: protoPrefix
+            )
+        }
     }
 }
 
-/// Builds the Swift type name for the enum generated for a `oneof` block.
+/// Builds the name of the enum generated for a `oneof`, as declared *within* its
+/// owning message (e.g. `OneOf_Content`).
+///
+/// The enum is nested rather than declared at the top level so that it can't collide
+/// with other generated types — a `message Foo` containing `oneof bar` would
+/// otherwise produce a top-level `FooBar` that clashes with a separate
+/// `message FooBar` — and so that payload types nested in the same message (such as
+/// a nested enum) still resolve.
+internal func oneofNestedTypeName(for oneof: ProtoOneof) -> String {
+    "OneOf_\(oneof.caseCorrectName.capitalizingFirstLetter())"
+}
+
+/// Builds the fully-qualified Swift type name for the enum generated for a `oneof`
+/// block.
 ///
 /// - Parameters:
 ///   - oneof: The oneof to build a type name for.
 ///   - message: The message the oneof is declared within.
 ///   - swiftPrefix: The prefix used for all generated Swift types.
-/// - Returns: The Swift type name, e.g. `AppMultimediaSlideContent`.
+/// - Returns: The Swift type name, e.g. `AppMultimediaSlide.OneOf_Content`.
 internal func oneofTypeName(for oneof: ProtoOneof, in message: ProtoMessage, with swiftPrefix: String) -> String {
-    "\(swiftPrefix)\(message.name)\(oneof.caseCorrectName.capitalizingFirstLetter())"
+    "\(swiftPrefix)\(message.name).\(oneofNestedTypeName(for: oneof))"
 }
 
 /// Builds the fully-qualified protobuf type name for a `oneof`'s generated enum, as
@@ -208,6 +221,11 @@ internal func protoOneofTypeName(for oneof: ProtoOneof, in message: ProtoMessage
 /// Writes the Swift enum generated for a single `oneof` block, along with (when
 /// `includeProto` is enabled) a failable initializer that converts from the
 /// corresponding protobuf-generated `OneOf_*` enum.
+///
+/// The enum is emitted in an extension of its owning message so it's namespaced by
+/// that message, and the cases are marked `indirect` so recursive oneofs (e.g.
+/// `message Node { oneof child { Node next = 1; } }`) don't form an infinitely sized
+/// value type.
 ///
 /// - Parameters:
 ///   - oneof: The oneof to write.
@@ -221,25 +239,26 @@ internal func writeOneofEnum(
     includeProto: Bool,
     with protoPrefix: String
 ) {
-    let typeName = oneofTypeName(for: oneof, in: message, with: swiftPrefix)
+    output += "extension \(swiftPrefix)\(message.name) {\n"
+    output += "    public enum \(oneofNestedTypeName(for: oneof)): Hashable, Equatable, Sendable {\n"
 
-    output += "public enum \(typeName): Hashable, Equatable, Sendable {\n"
     for field in oneof.fields {
-        output += "    indirect case \(field.caseCorrectName)(\(field.caseCorrectedBaseType))\n"
+        output += "        indirect case \(field.caseCorrectName)(\(field.caseCorrectedBaseType))\n"
     }
 
     if includeProto {
         output += "\n"
-        output += "    internal init?(proto: \(protoOneofTypeName(for: oneof, in: message, with: protoPrefix))) {\n"
-        output += "        switch proto {\n"
+        output += "        internal init?(proto: \(protoOneofTypeName(for: oneof, in: message, with: protoPrefix))) {\n"
+        output += "            switch proto {\n"
         for field in oneof.fields {
-            output += "        case .\(field.caseCorrectProtoName)(let value):\n"
+            output += "            case .\(field.caseCorrectProtoName)(let value):\n"
             writeOneofCaseConversion(for: field, to: &output)
         }
+        output += "            }\n"
         output += "        }\n"
-        output += "    }\n"
     }
 
+    output += "    }\n"
     output += "}\n\n"
 }
 
@@ -251,25 +270,32 @@ internal func writeOneofEnum(
 ///   - output: A mutable string where the generated code will be appended.
 internal func writeOneofCaseConversion(for field: ProtoField, to output: inout String) {
     if field.caseCorrectedBaseType == "TimeInterval" {
-        output += "            self = .\(field.caseCorrectName)(value.timeInterval)\n"
+        output += "                self = .\(field.caseCorrectName)(value.timeInterval)\n"
     } else if field.caseCorrectedBaseType == "Date" {
-        output += "            self = .\(field.caseCorrectName)(value.date)\n"
+        output += "                self = .\(field.caseCorrectName)(value.date)\n"
     } else if field.isURL {
-        output += "            if let url = URL(string: value) {\n"
-        output += "                self = .\(field.caseCorrectName)(url)\n"
-        output += "            } else {\n"
-        output += "                return nil\n"
-        output += "            }\n"
-    } else if field.type.contains("int") {
-        output += "            self = .\(field.caseCorrectName)(Int(exactly: value)!)\n"
+        output += "                if let url = URL(string: value) {\n"
+        output += "                    self = .\(field.caseCorrectName)(url)\n"
+        output += "                } else {\n"
+        output += "                    return nil\n"
+        output += "                }\n"
+    } else if field.isIntegerType {
+        // Protobuf's fixed-width integers (Int32/UInt32/Int64/UInt64) have to be
+        // converted to the Int/UInt the case declares, and the conversion can fail
+        // for out-of-range values, so prefer returning nil over trapping.
+        output += "                if let converted = \(field.caseCorrectedBaseType)(exactly: value) {\n"
+        output += "                    self = .\(field.caseCorrectName)(converted)\n"
+        output += "                } else {\n"
+        output += "                    return nil\n"
+        output += "                }\n"
     } else if field.isPrimitiveType {
-        output += "            self = .\(field.caseCorrectName)(value)\n"
+        output += "                self = .\(field.caseCorrectName)(value)\n"
     } else {
-        output += "            if let converted = \(field.caseCorrectedBaseType)(proto: value) as \(field.caseCorrectedBaseType)? {\n"
-        output += "                self = .\(field.caseCorrectName)(converted)\n"
-        output += "            } else {\n"
-        output += "                return nil\n"
-        output += "            }\n"
+        output += "                if let converted = \(field.caseCorrectedBaseType)(proto: value) as \(field.caseCorrectedBaseType)? {\n"
+        output += "                    self = .\(field.caseCorrectName)(converted)\n"
+        output += "                } else {\n"
+        output += "                    return nil\n"
+        output += "                }\n"
     }
 }
 
