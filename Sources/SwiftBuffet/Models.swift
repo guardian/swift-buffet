@@ -123,6 +123,8 @@ struct ProtoOneof {
     let name: String
     /// The member fields declared inside the oneof block.
     let fields: [ProtoField]
+    /// An optional doc comment that immediately preceded the oneof block.
+    var comment: String?
 
     /// The case-corrected name of the oneof, converted to camelCase.
     var caseCorrectName: String {

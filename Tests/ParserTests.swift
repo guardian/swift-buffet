@@ -421,6 +421,242 @@ final class ParserTests: XCTestCase {
         XCTAssertTrue(slideMessage.fields.first { $0.name == "renamed" }?.isDeprecated == false, "A non-deprecation option should not mark the field deprecated")
     }
 
+    /// A oneof member carrying a multi-line option block must still be parsed.
+    /// Dropping it would leave the generated switch missing a case that
+    /// SwiftProtobuf's enum does have.
+    func testParseOneofMemberWithMultiLineOption() throws {
+        var protoFileContent = """
+        syntax = "proto3";
+
+        message Slide {
+          oneof content {
+            string text = 1;
+            string html = 2 [
+              (validate.rules).string.min_len = 1
+            ];
+            int32 number = 3;
+          }
+        }
+        """
+
+        let (messages, _) = parseContent(
+            &protoFileContent,
+            parent: nil,
+            with: "MyApp",
+            verbose: false,
+            quite: true
+        )
+
+        let slideMessage = messages.first { $0.name == "Slide" }!
+        XCTAssertEqual(
+            slideMessage.oneofs.first?.fields.map(\.name),
+            ["text", "html", "number"],
+            "A member whose options span multiple lines must not be dropped"
+        )
+    }
+
+    /// The option group must not run past its own field. A greedy match would
+    /// swallow a following declaration on the same line, dropping that field and
+    /// borrowing its `deprecated` flag.
+    func testParseTwoOptionBearingFieldsOnOneLine() throws {
+        var protoFileContent = """
+        syntax = "proto3";
+
+        message Mixed {
+          string a = 1 [json_name = "a"]; string b = 2 [deprecated = true];
+        }
+        """
+
+        let (messages, _) = parseContent(
+            &protoFileContent,
+            parent: nil,
+            with: "MyApp",
+            verbose: false,
+            quite: true
+        )
+
+        let mixed = messages.first { $0.name == "Mixed" }!
+        XCTAssertEqual(mixed.fields.map(\.name), ["a", "b"], "Neither field should be swallowed by the other's option group")
+        XCTAssertEqual(mixed.fields.first { $0.name == "a" }?.isDeprecated, false, "'a' is not deprecated")
+        XCTAssertEqual(mixed.fields.first { $0.name == "b" }?.isDeprecated, true, "'b' is deprecated")
+    }
+
+    /// `deprecated` must be matched as an option, not as arbitrary text that happens
+    /// to appear inside another option's string value.
+    func testDeprecatedInsideStringValueDoesNotMarkFieldDeprecated() throws {
+        var protoFileContent = """
+        syntax = "proto3";
+
+        message Slide {
+          string a = 1 [json_name = "not deprecated = true"];
+        }
+        """
+
+        let (messages, _) = parseContent(
+            &protoFileContent,
+            parent: nil,
+            with: "MyApp",
+            verbose: false,
+            quite: true
+        )
+
+        let slide = messages.first { $0.name == "Slide" }!
+        XCTAssertEqual(slide.fields.first?.name, "a", "The field should still be parsed")
+        XCTAssertEqual(slide.fields.first?.isDeprecated, false, "Text inside a string value must not be read as a real 'deprecated' option")
+    }
+
+    /// A doc comment immediately before a `oneof` describes the oneof. It must be
+    /// taken with the block, not left behind for the field regex to attach to
+    /// whichever field happens to follow.
+    func testOneofDocCommentIsNotTransplantedOntoNextField() throws {
+        var protoFileContent = """
+        syntax = "proto3";
+
+        message Doc {
+          /** Documentation for the content oneof. */
+          oneof content {
+            string a = 1;
+          }
+          string trailing = 2;
+        }
+        """
+
+        let (messages, _) = parseContent(
+            &protoFileContent,
+            parent: nil,
+            with: "MyApp",
+            verbose: false,
+            quite: true
+        )
+
+        let doc = messages.first { $0.name == "Doc" }!
+        XCTAssertNil(doc.fields.first { $0.name == "trailing" }?.comment, "The oneof's doc comment must not be attached to the following field")
+        XCTAssertEqual(doc.oneofs.first?.comment?.contains("Documentation for the content oneof"), true, "The doc comment should be carried by the oneof")
+    }
+
+    /// `messagePattern` used to require a literal `\n}`, so a message written on one
+    /// line never terminated and swallowed everything after it.
+    func testParseSingleLineMessage() throws {
+        var protoFileContent = """
+        syntax = "proto3";
+
+        message Point { int32 x = 1; }
+        message Other { string name = 1; }
+        """
+
+        let (messages, _) = parseContent(
+            &protoFileContent,
+            parent: nil,
+            with: "MyApp",
+            verbose: false,
+            quite: true
+        )
+
+        XCTAssertEqual(messages.map(\.name).sorted(), ["Other", "Point"], "Both single-line messages should parse as separate messages")
+        XCTAssertEqual(messages.first { $0.name == "Point" }?.fields.map(\.name), ["x"], "'Point' should own only its own field")
+        XCTAssertEqual(messages.first { $0.name == "Other" }?.fields.map(\.name), ["name"], "'Other' should own only its own field")
+    }
+
+    /// CRLF files previously failed at the whole-message regex, producing no output
+    /// at all.
+    func testParseMessageWithCRLFLineEndings() throws {
+        var protoFileContent = "syntax = \"proto3\";\r\n\r\nmessage Slide {\r\n  oneof content {\r\n    // pick one\r\n    Image image = 1;\r\n    Video video = 2;\r\n  }\r\n  optional string label = 3;\r\n}\r\n"
+
+        let (messages, _) = parseContent(
+            &protoFileContent,
+            parent: nil,
+            with: "MyApp",
+            verbose: false,
+            quite: true
+        )
+
+        let slide = messages.first { $0.name == "Slide" }
+        XCTAssertNotNil(slide, "A CRLF file should still parse its messages")
+        XCTAssertEqual(slide?.oneofs.first?.fields.map(\.name), ["image", "video"], "Oneof members should parse with CRLF line endings")
+        XCTAssertEqual(slide?.fields.map(\.name), ["label"], "Ordinary fields should parse with CRLF line endings")
+    }
+
+    /// Nested messages should be scoped by brace balancing, not by indentation luck.
+    func testParseNestedMessageInsideMessage() throws {
+        var protoFileContent = """
+        syntax = "proto3";
+
+        message Outer {
+          message Inner {
+            string a = 1;
+          }
+          Inner inner = 1;
+          string b = 2;
+        }
+        """
+
+        let (messages, _) = parseContent(
+            &protoFileContent,
+            parent: nil,
+            with: "MyApp",
+            verbose: false,
+            quite: true
+        )
+
+        let outer = messages.first { $0.name == "Outer" }!
+        let inner = messages.first { $0.name == "Inner" }!
+        XCTAssertEqual(inner.parentName, "Outer", "'Inner' should be recorded as nested inside 'Outer'")
+        XCTAssertEqual(inner.fields.map(\.name), ["a"], "'Inner' should own only its own field")
+        XCTAssertEqual(outer.fields.map(\.name), ["inner", "b"], "'Outer' should not absorb the nested message's fields")
+    }
+
+    /// A commented-out field must not be generated as a real property, while a
+    /// `/** ... */` doc comment must still be captured for the field it documents.
+    func testParseIgnoresCommentedOutFieldsButKeepsDocComments() throws {
+        var protoFileContent = """
+        syntax = "proto3";
+
+        message Slide {
+          /** The title of the slide. */
+          string title = 1;
+          // string commentedOut = 2;
+          /* string blockCommentedOut = 3; */
+          string subtitle = 4;
+        }
+        """
+
+        let (messages, _) = parseContent(
+            &protoFileContent,
+            parent: nil,
+            with: "MyApp",
+            verbose: false,
+            quite: true
+        )
+
+        let slide = messages.first { $0.name == "Slide" }!
+        XCTAssertEqual(slide.fields.map(\.name), ["title", "subtitle"], "Commented-out fields must not be parsed")
+        XCTAssertEqual(slide.fields.first { $0.name == "title" }?.comment?.contains("The title of the slide"), true, "A doc comment should still be captured")
+    }
+
+    /// The same applies to commented-out enum cases.
+    func testParseIgnoresCommentedOutEnumCases() throws {
+        var protoFileContent = """
+        syntax = "proto3";
+
+        enum Status {
+          STATUS_ACTIVE = 0;
+          // STATUS_REMOVED = 1;
+          STATUS_INACTIVE = 2;
+        }
+        """
+
+        let (_, enums) = parseContent(
+            &protoFileContent,
+            parent: nil,
+            with: "MyApp",
+            verbose: false,
+            quite: true
+        )
+
+        let status = enums.first { $0.name == "Status" }!
+        XCTAssertEqual(status.cases.map(\.name), ["STATUS_ACTIVE", "STATUS_INACTIVE"], "A commented-out enum case must not be parsed")
+    }
+
     /// `\r\n` is a single Swift `Character`, so a scanner comparing against `"\n"`
     /// never leaves line-comment state and fails to find the closing brace, silently
     /// dropping the oneof. Exercised at the `parseOneofs` level because CRLF also

@@ -254,6 +254,12 @@ internal func writeOneofEnum(
             output += "            case .\(field.caseCorrectProtoName)(let value):\n"
             writeOneofCaseConversion(for: field, to: &output)
         }
+        // SwiftProtobuf's enum has a case per member in the .proto, while this enum
+        // only has the members the parser recognised. `@unknown default` keeps the
+        // generated file compiling (with a warning rather than a hard error) if those
+        // ever disagree, and is silent when they match.
+        output += "            @unknown default:\n"
+        output += "                return nil\n"
         output += "            }\n"
         output += "        }\n"
     }
@@ -299,6 +305,25 @@ internal func writeOneofCaseConversion(for field: ProtoField, to output: inout S
     }
 }
 
+/// Writes a proto doc comment as Swift line comments above a property.
+///
+/// - Parameters:
+///   - comment: The raw `/** ... */` comment from the proto file.
+///   - output: A mutable string where the generated code will be appended.
+internal func writeDocComment(_ comment: String, to output: inout String) {
+    output += "\n"
+    output += comment
+        .replacingOccurrences(of: "/**", with: "")
+        .replacingOccurrences(of: "*/", with: "")
+        .replacingOccurrences(of: "*", with: "")
+        .split(separator: "\n")
+        .map { $0.trimmingCharacters(in: .whitespaces) }
+        .filter { !$0.isEmpty }
+        .map { String("    // \($0)") }
+        .joined(separator: "\n")
+    output += "\n"
+}
+
 /// Adds properties to a message struct.
 ///
 /// - Parameters:
@@ -314,17 +339,7 @@ internal func writeProperties(
 ) {
     for field in message.fields {
         if let comment = field.comment {
-            output += "\n"
-            output += comment
-                .replacingOccurrences(of: "/**", with: "")
-                .replacingOccurrences(of: "*/", with: "")
-                .replacingOccurrences(of: "*", with: "")
-                .split(separator: "\n")
-                .map { $0.trimmingCharacters(in: .whitespaces) }
-                .filter { !$0.isEmpty }
-                .map { String("    // \($0)") }
-                .joined(separator: "\n")
-            output += "\n"
+            writeDocComment(comment, to: &output)
         }
         if field.isDeprecated {
             output += #"/// This property has been marked as **deprecated** in the proto file"#
@@ -333,6 +348,9 @@ internal func writeProperties(
         output += "    public let \(field.caseCorrectName): \(field.caseCorrectedType)\n"
     }
     for oneof in message.oneofs {
+        if let comment = oneof.comment {
+            writeDocComment(comment, to: &output)
+        }
         output += "    public let \(oneof.caseCorrectName): \(oneofTypeName(for: oneof, in: message, with: swiftPrefix))?\n"
     }
     if includeLocalID {
