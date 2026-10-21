@@ -140,4 +140,279 @@ final class ParserTests: XCTestCase {
         XCTAssertFalse(createdAtField.isRepeated, "Expected field to be non-repeated")
         XCTAssertFalse(createdAtField.isMap, "Expected field to be non-map")
     }
+
+    /// `oneof` member fields are mutually exclusive, so the parser must extract them
+    /// into a separate `ProtoOneof` rather than letting them also be matched as
+    /// ordinary top-level fields by the field-matching regex.
+    func testParseMessageWithOneof() throws {
+        var protoFileContent = """
+        syntax = "proto3";
+
+        message MultimediaSlide {
+          oneof content {
+            Image image = 1;
+            Video video = 2;
+          }
+          optional string label = 3;
+        }
+        """
+
+        let (messages, enums) = parseContent(
+            &protoFileContent,
+            parent: nil,
+            with: "MyApp",
+            verbose: false,
+            quite: true
+        )
+
+        XCTAssertEqual(messages.count, 1, "Expected to find 1 message, but got \(messages.count)")
+        XCTAssertEqual(enums.count, 0, "Expected to find 0 enums, but got \(enums.count)")
+
+        let slideMessage = messages.first!
+        XCTAssertEqual(slideMessage.fields.count, 1, "The oneof's member fields should not also be parsed as top-level fields")
+        XCTAssertEqual(slideMessage.fields.first?.name, "label", "The only top-level field should be 'label'")
+
+        XCTAssertEqual(slideMessage.oneofs.count, 1, "Expected to find 1 oneof, but got \(slideMessage.oneofs.count)")
+        let contentOneof = slideMessage.oneofs.first!
+        XCTAssertEqual(contentOneof.name, "content", "Expected oneof name to be 'content', but got '\(contentOneof.name)'")
+        XCTAssertEqual(contentOneof.fields.count, 2, "Expected 2 member fields in the oneof, but got \(contentOneof.fields.count)")
+
+        let imageField = contentOneof.fields.first { $0.name == "image" }!
+        XCTAssertEqual(imageField.type, "Image", "Expected field type to be 'Image', but got '\(imageField.type)'")
+        XCTAssertFalse(imageField.isOptional, "Oneof member fields should not themselves be marked optional")
+
+        let videoField = contentOneof.fields.first { $0.name == "video" }!
+        XCTAssertEqual(videoField.type, "Video", "Expected field type to be 'Video', but got '\(videoField.type)'")
+    }
+
+    /// A naive `oneof ... { ... }` regex stops at the first `}`, so a brace inside a
+    /// comment would end the block early and leak the remaining members out as
+    /// ordinary top-level fields, losing mutual exclusivity.
+    func testParseOneofWithBraceInComment() throws {
+        var protoFileContent = """
+        syntax = "proto3";
+
+        message MultimediaSlide {
+          oneof content {
+            // JSON example: {}
+            Image image = 1;
+            Video video = 2;
+          }
+          optional string label = 3;
+        }
+        """
+
+        let (messages, _) = parseContent(
+            &protoFileContent,
+            parent: nil,
+            with: "MyApp",
+            verbose: false,
+            quite: true
+        )
+
+        let slideMessage = messages.first { $0.name == "MultimediaSlide" }!
+        XCTAssertEqual(slideMessage.oneofs.count, 1, "Expected to find 1 oneof, but got \(slideMessage.oneofs.count)")
+        XCTAssertEqual(slideMessage.oneofs.first?.fields.count, 2, "Both oneof members should be captured despite the braces in the comment")
+        XCTAssertEqual(slideMessage.fields.count, 1, "Oneof members should not leak out as top-level fields")
+        XCTAssertEqual(slideMessage.fields.first?.name, "label", "The only top-level field should be 'label'")
+    }
+
+    /// Aggregate options contain braces too, and must not terminate the oneof block.
+    func testParseOneofWithAggregateOption() throws {
+        var protoFileContent = """
+        syntax = "proto3";
+
+        message MultimediaSlide {
+          oneof content {
+            option (metadata) = { enabled: true };
+            Image image = 1;
+            Video video = 2;
+          }
+          optional string label = 3;
+        }
+        """
+
+        let (messages, _) = parseContent(
+            &protoFileContent,
+            parent: nil,
+            with: "MyApp",
+            verbose: false,
+            quite: true
+        )
+
+        let slideMessage = messages.first { $0.name == "MultimediaSlide" }!
+        XCTAssertEqual(slideMessage.oneofs.count, 1, "Expected to find 1 oneof, but got \(slideMessage.oneofs.count)")
+
+        let memberNames = slideMessage.oneofs.first?.fields.map(\.name) ?? []
+        XCTAssertEqual(memberNames, ["image", "video"], "Both oneof members should be captured despite the braces in the aggregate option")
+        XCTAssertEqual(slideMessage.fields.count, 1, "Oneof members should not leak out as top-level fields")
+        XCTAssertEqual(slideMessage.fields.first?.name, "label", "The only top-level field should be 'label'")
+    }
+
+    /// A message can declare more than one oneof, and fields may appear between and
+    /// after them — all of which must survive the block extraction.
+    func testParseMessageWithMultipleOneofs() throws {
+        var protoFileContent = """
+        syntax = "proto3";
+
+        message Multi {
+          string before = 1;
+          oneof first {
+            Image image = 2;
+          }
+          string between = 3;
+          oneof second {
+            Video video = 4;
+          }
+          string after = 5;
+        }
+        """
+
+        let (messages, _) = parseContent(
+            &protoFileContent,
+            parent: nil,
+            with: "MyApp",
+            verbose: false,
+            quite: true
+        )
+
+        let multiMessage = messages.first { $0.name == "Multi" }!
+        XCTAssertEqual(multiMessage.oneofs.map(\.name), ["first", "second"], "Both oneofs should be captured")
+        XCTAssertEqual(multiMessage.oneofs.first?.fields.map(\.name), ["image"], "The first oneof should own 'image'")
+        XCTAssertEqual(multiMessage.oneofs.last?.fields.map(\.name), ["video"], "The second oneof should own 'video'")
+        XCTAssertEqual(multiMessage.fields.map(\.name), ["before", "between", "after"], "Fields surrounding the oneofs should be preserved")
+    }
+
+    /// A commented-out or quoted `oneof` header must not be treated as a real
+    /// declaration, otherwise generation emits a phantom enum and references a
+    /// `proto` member that doesn't exist.
+    func testParseIgnoresOneofHeaderInsideComment() throws {
+        var protoFileContent = """
+        syntax = "proto3";
+
+        message Slide {
+          // Example: oneof ignored {}
+          string title = 1;
+        }
+        """
+
+        let (messages, _) = parseContent(
+            &protoFileContent,
+            parent: nil,
+            with: "MyApp",
+            verbose: false,
+            quite: true
+        )
+
+        let slideMessage = messages.first { $0.name == "Slide" }!
+        XCTAssertTrue(slideMessage.oneofs.isEmpty, "A oneof header inside a comment should not create a phantom oneof, but got \(slideMessage.oneofs.map(\.name))")
+        XCTAssertEqual(slideMessage.fields.map(\.name), ["title"], "The real field should still be parsed")
+    }
+
+    /// The same applies to a `oneof` header inside a block comment or a string
+    /// literal.
+    ///
+    /// Note: this only asserts that no phantom *oneof* is created. Fields that are
+    /// themselves commented out (e.g. `string nope = 9;` inside a block comment) are
+    /// still picked up by the field regex — a separate, pre-existing limitation of
+    /// `fieldPattern`, which has never been comment-aware and which also affects
+    /// ordinary messages.
+    func testParseIgnoresOneofHeaderInsideBlockCommentAndString() throws {
+        var protoFileContent = """
+        syntax = "proto3";
+
+        message Slide {
+          /* oneof alsoIgnored { } */
+          string title = 1;
+          string example = 2 [json_name = "oneof quoted { }"];
+        }
+        """
+
+        let (messages, _) = parseContent(
+            &protoFileContent,
+            parent: nil,
+            with: "MyApp",
+            verbose: false,
+            quite: true
+        )
+
+        let slideMessage = messages.first { $0.name == "Slide" }!
+        XCTAssertTrue(
+            slideMessage.oneofs.isEmpty,
+            "A oneof header inside a block comment or string literal should not create a phantom oneof, but got \(slideMessage.oneofs.map(\.name))"
+        )
+    }
+
+    /// An identifier that merely ends in "oneof" is not the `oneof` keyword.
+    func testParseDoesNotTreatSimilarIdentifierAsOneof() throws {
+        var protoFileContent = """
+        syntax = "proto3";
+
+        message Slide {
+          string my_oneof = 1;
+        }
+        """
+
+        let (messages, _) = parseContent(
+            &protoFileContent,
+            parent: nil,
+            with: "MyApp",
+            verbose: false,
+            quite: true
+        )
+
+        let slideMessage = messages.first { $0.name == "Slide" }!
+        XCTAssertTrue(slideMessage.oneofs.isEmpty, "'my_oneof' is a field name, not a oneof declaration")
+        XCTAssertEqual(slideMessage.fields.map(\.name), ["my_oneof"], "The field should be parsed normally")
+    }
+
+    /// A doc comment immediately before a `oneof` describes the oneof. It must be
+    /// taken with the block, not left behind for the field regex to attach to
+    /// whichever field happens to follow.
+    func testOneofDocCommentIsNotTransplantedOntoNextField() throws {
+        var protoFileContent = """
+        syntax = "proto3";
+
+        message Doc {
+          /** Documentation for the content oneof. */
+          oneof content {
+            string a = 1;
+          }
+          string trailing = 2;
+        }
+        """
+
+        let (messages, _) = parseContent(
+            &protoFileContent,
+            parent: nil,
+            with: "MyApp",
+            verbose: false,
+            quite: true
+        )
+
+        let doc = messages.first { $0.name == "Doc" }!
+        XCTAssertNil(doc.fields.first { $0.name == "trailing" }?.comment, "The oneof's doc comment must not be attached to the following field")
+        XCTAssertEqual(doc.oneofs.first?.comment?.contains("Documentation for the content oneof"), true, "The doc comment should be carried by the oneof")
+    }
+
+    /// `\r\n` is a single Swift `Character`, so a scanner comparing against `"\n"`
+    /// never leaves line-comment state and fails to find the closing brace, silently
+    /// dropping the oneof. Exercised at the `parseOneofs` level because CRLF also
+    /// defeats the (pre-existing, separate) whole-message regex.
+    func testParseOneofWithCRLFLineEndings() throws {
+        var body = "\r\n  oneof content {\r\n    // pick one\r\n    Image image = 1;\r\n    Video video = 2;\r\n  }\r\n  string label = 3;\r\n"
+
+        let oneofs = parseOneofs(
+            &body,
+            with: "MyApp",
+            verbose: false,
+            quite: true
+        )
+
+        XCTAssertEqual(oneofs.count, 1, "The oneof should be found despite CRLF line endings")
+        XCTAssertEqual(oneofs.first?.fields.map(\.name), ["image", "video"], "Both members should be captured past the CRLF-terminated comment")
+
+        let remainingFields = parseMessageFields(from: body, with: "MyApp", verbose: false, quite: true)
+        XCTAssertEqual(remainingFields.map(\.name), ["label"], "Oneof members must not leak out as ordinary fields")
+    }
 }

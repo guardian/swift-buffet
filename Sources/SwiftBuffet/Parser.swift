@@ -181,6 +181,13 @@ internal func processMessage(
     localMessages.append(contentsOf: nestedMessages)
     localEnums.append(contentsOf: nestedEnums)
 
+    let oneofs = parseOneofs(
+        &body,
+        with: prefix,
+        verbose: verbose,
+        quite: quite
+    )
+
     let fields = parseMessageFields(
         from: body,
         with: prefix,
@@ -192,11 +199,249 @@ internal func processMessage(
         ProtoMessage(
             name: name,
             fields: fields,
-            parentName: parent
+            parentName: parent,
+            oneofs: oneofs
         )
     )
 }
 
+
+/// Parses and removes `oneof` blocks from a message body, returning the extracted
+/// oneofs. This runs before `parseMessageFields` so a oneof's member fields are
+/// represented once, as part of its `ProtoOneof`, rather than also being matched as
+/// independent top-level fields by the field-matching regex.
+///
+/// Blocks are extracted by scanning for a balanced closing brace rather than with a
+/// single regex, so braces appearing inside comments, string literals, or aggregate
+/// options (e.g. `option (metadata) = { enabled: true };`) don't truncate the block
+/// and leak its members back out as ordinary fields.
+///
+/// - Parameters:
+///   - body: The message body to parse; matched oneof blocks are removed from it.
+/// - Returns: An array of `ProtoOneof` representing the oneof blocks found.
+internal func parseOneofs(
+    _ body: inout String,
+    with swiftPrefix: String,
+    verbose: Bool,
+    quite: Bool
+) -> [ProtoOneof] {
+    var oneofs: [ProtoOneof] = []
+    var remaining = Substring(body)
+    var retained = ""
+
+    while let header = findOneofHeader(in: remaining) {
+        let oneofName = header.name
+
+        // Anything before the `oneof` keyword is an ordinary part of the message.
+        retained += remaining[remaining.startIndex..<header.start]
+
+        // A doc comment sitting immediately before the block describes the oneof, so
+        // take it with the block. Leaving it in `retained` would let the field regex
+        // bind it to whatever field happens to follow.
+        let comment = extractTrailingDocComment(from: &retained)
+
+        guard let closeBraceIndex = findMatchingClosingBrace(
+            in: remaining,
+            startingAtOpenBrace: header.openBrace
+        ) else {
+            // Unbalanced braces: leave the remainder untouched rather than silently
+            // dropping it, so a malformed block can't swallow the rest of the message.
+            retained += remaining[header.start...]
+            remaining = ""
+            break
+        }
+
+        let bodyStart = remaining.index(after: header.openBrace)
+        let oneofBody = String(remaining[bodyStart..<closeBraceIndex])
+
+        if quite == false {
+            print("Matched oneof: \(oneofName)")
+        }
+        if verbose == true {
+            print("Matched oneof body: \(oneofBody)")
+        }
+
+        let fields = parseMessageFields(
+            from: oneofBody,
+            with: swiftPrefix,
+            verbose: verbose,
+            quite: quite
+        )
+
+        oneofs.append(
+            ProtoOneof(
+                name: oneofName,
+                fields: fields,
+                comment: comment
+            )
+        )
+
+        // Drop the whole block so its members aren't also matched as regular fields.
+        remaining = remaining[remaining.index(after: closeBraceIndex)...]
+    }
+
+    retained += remaining
+    body = retained
+
+    return oneofs
+}
+
+/// Locates the next `oneof` header that appears in actual code, skipping any that
+/// occur inside comments or string literals — a commented-out
+/// `// Example: oneof ignored {}` must not produce a phantom oneof.
+///
+/// - Parameter text: The text to search.
+/// - Returns: The index the header starts at, the index of its opening brace, and
+///   the oneof's name; or `nil` if no header is found.
+internal func findOneofHeader(
+    in text: Substring
+) -> (start: Substring.Index, openBrace: Substring.Index, name: String)? {
+    var index = text.startIndex
+    var inLineComment = false
+    var inBlockComment = false
+    var stringDelimiter: Character?
+
+    while index < text.endIndex {
+        let character = text[index]
+        let nextIndex = text.index(after: index)
+        let nextCharacter = nextIndex < text.endIndex ? text[nextIndex] : nil
+
+        if inLineComment {
+            // `\r\n` is a single Swift `Character`, so compare with `isNewline`
+            // rather than `== "\n"`, which never matches on CRLF input.
+            if character.isNewline {
+                inLineComment = false
+            }
+        } else if inBlockComment {
+            if character == "*", nextCharacter == "/" {
+                inBlockComment = false
+                index = nextIndex
+            }
+        } else if let delimiter = stringDelimiter {
+            if character == "\\", nextCharacter != nil {
+                index = nextIndex // Skip the escaped character.
+            } else if character == delimiter {
+                stringDelimiter = nil
+            }
+        } else if character == "/", nextCharacter == "/" {
+            inLineComment = true
+            index = nextIndex
+        } else if character == "/", nextCharacter == "*" {
+            inBlockComment = true
+            index = nextIndex
+        } else if character == "\"" || character == "'" {
+            stringDelimiter = character
+        } else if character == "o", isWordStart(at: index, in: text) {
+            if let match = text[index...].prefixMatch(of: oneofHeaderPattern) {
+                // The header match ends immediately after the opening brace.
+                let openBrace = text.index(before: match.range.upperBound)
+                return (index, openBrace, String(match.1))
+            }
+        }
+
+        index = text.index(after: index)
+    }
+
+    return nil
+}
+
+/// Indicates whether the given index begins a new word, so that an identifier such
+/// as `my_oneof` isn't mistaken for the `oneof` keyword.
+private func isWordStart(at index: Substring.Index, in text: Substring) -> Bool {
+    guard index > text.startIndex else {
+        return true
+    }
+    let previous = text[text.index(before: index)]
+    return !(previous.isLetter || previous.isNumber || previous == "_")
+}
+
+/// Removes a `/** ... */` doc comment from the end of `text`, if one is the last
+/// thing there apart from whitespace, and returns it.
+///
+/// - Parameter text: The text to take the trailing doc comment from.
+/// - Returns: The doc comment, or `nil` if the text doesn't end with one.
+internal func extractTrailingDocComment(from text: inout String) -> String? {
+    guard text.hasSuffix("*/") || text.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("*/") else {
+        return nil
+    }
+    guard let commentStart = text.range(of: "/**", options: .backwards) else {
+        return nil
+    }
+    guard let commentEnd = text.range(of: "*/", range: commentStart.upperBound..<text.endIndex) else {
+        return nil
+    }
+    // Only treat it as the oneof's comment when nothing but whitespace follows it.
+    guard text[commentEnd.upperBound...].allSatisfy({ $0.isWhitespace }) else {
+        return nil
+    }
+
+    let comment = String(text[commentStart.lowerBound..<commentEnd.upperBound])
+    text.removeSubrange(commentStart.lowerBound..<text.endIndex)
+    return comment
+}
+
+/// Scans forward from an opening brace to find its matching closing brace, ignoring
+/// braces that appear inside line comments, block comments, or string literals.
+///
+/// - Parameters:
+///   - text: The text to scan.
+///   - openBrace: The index of the opening `{` to match.
+/// - Returns: The index of the matching `}`, or `nil` if the braces are unbalanced.
+internal func findMatchingClosingBrace(
+    in text: Substring,
+    startingAtOpenBrace openBrace: Substring.Index
+) -> Substring.Index? {
+    var depth = 0
+    var index = openBrace
+    var inLineComment = false
+    var inBlockComment = false
+    var stringDelimiter: Character?
+
+    while index < text.endIndex {
+        let character = text[index]
+        let nextIndex = text.index(after: index)
+        let nextCharacter = nextIndex < text.endIndex ? text[nextIndex] : nil
+
+        if inLineComment {
+            // `\r\n` is a single Swift `Character`, so compare with `isNewline`
+            // rather than `== "\n"`, which never matches on CRLF input and would
+            // leave the scanner stuck inside the comment.
+            if character.isNewline {
+                inLineComment = false
+            }
+        } else if inBlockComment {
+            if character == "*", nextCharacter == "/" {
+                inBlockComment = false
+                index = nextIndex
+            }
+        } else if let delimiter = stringDelimiter {
+            if character == "\\", nextCharacter != nil {
+                index = nextIndex // Skip the escaped character.
+            } else if character == delimiter {
+                stringDelimiter = nil
+            }
+        } else if character == "/", nextCharacter == "/" {
+            inLineComment = true
+            index = nextIndex
+        } else if character == "/", nextCharacter == "*" {
+            inBlockComment = true
+            index = nextIndex
+        } else if character == "\"" || character == "'" {
+            stringDelimiter = character
+        } else if character == "{" {
+            depth += 1
+        } else if character == "}" {
+            depth -= 1
+            if depth == 0 {
+                return index
+            }
+        }
+
+        index = text.index(after: index)
+    }
+
+    return nil
+}
 
 /// Parses the fields of a protocol buffer message.
 ///

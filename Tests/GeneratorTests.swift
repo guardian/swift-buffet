@@ -450,4 +450,231 @@ final class GeneratorTests: XCTestCase {
             "A non-optional enum-typed field must use an 'as Type?' cast so the binding compiles whether the nested init is failable (messages) or not (enums)"
         )
     }
+
+    /// `oneof` fields are mutually exclusive, so they should be generated as a single
+    /// optional enum property (one case per member) rather than as several
+    /// independent, non-optional struct properties.
+    func testGenerateMessageWithOneof() {
+        let contentOneof = ProtoOneof(
+            name: "content",
+            fields: [
+                ProtoField(
+                    swiftPrefix: "App",
+                    name: "image",
+                    type: "Image",
+                    comment: nil,
+                    isOptional: false,
+                    isRepeated: false,
+                    isMap: false,
+                    isDeprecated: false
+                ),
+                ProtoField(
+                    swiftPrefix: "App",
+                    name: "video",
+                    type: "Video",
+                    comment: nil,
+                    isOptional: false,
+                    isRepeated: false,
+                    isMap: false,
+                    isDeprecated: false
+                )
+            ]
+        )
+
+        let slideProtoMessage = ProtoMessage(
+            name: "MultimediaSlide",
+            fields: [
+                ProtoField(
+                    swiftPrefix: "App",
+                    name: "label",
+                    type: "string",
+                    comment: nil,
+                    isOptional: true,
+                    isRepeated: false,
+                    isMap: false,
+                    isDeprecated: false
+                )
+            ],
+            parentName: nil,
+            oneofs: [contentOneof]
+        )
+
+        let generatedCode = generateSwiftCode(
+            from: [slideProtoMessage],
+            enums: [],
+            with: "App",
+            includeProto: true,
+            includeLocalIDFor: nil,
+            includeBackingData: false,
+            with: "Proto"
+        )
+
+        XCTAssertTrue(generatedCode.contains("extension AppMultimediaSlide {"), "The oneof enum should be nested in an extension of its owning message")
+        XCTAssertTrue(generatedCode.contains("public enum OneOf_Content: Hashable, Equatable, Sendable {"), "The generated code should contain the nested 'OneOf_Content' enum")
+        XCTAssertTrue(generatedCode.contains("indirect case image(AppImage)"), "The oneof enum should contain the 'image' case")
+        XCTAssertTrue(generatedCode.contains("indirect case video(AppVideo)"), "The oneof enum should contain the 'video' case")
+
+        XCTAssertTrue(generatedCode.contains("public let content: AppMultimediaSlide.OneOf_Content?"), "The message struct should contain an optional 'content' property of the nested oneof enum type")
+        XCTAssertTrue(generatedCode.contains("public let label: String?"), "The message struct should still contain its regular 'label' property")
+
+        XCTAssertFalse(generatedCode.contains("public let image:"), "Oneof member fields should not also be generated as independent struct properties")
+        XCTAssertFalse(generatedCode.contains("public let video:"), "Oneof member fields should not also be generated as independent struct properties")
+
+        XCTAssertTrue(generatedCode.contains("internal init?(proto: ProtoMultimediaSlide.OneOf_Content)"), "The oneof enum should have a failable initializer from the generated protobuf 'OneOf_Content' enum")
+        XCTAssertTrue(generatedCode.contains("case .image(let value):"), "The proto initializer should switch over the proto's 'image' case")
+        XCTAssertTrue(generatedCode.contains("case .video(let value):"), "The proto initializer should switch over the proto's 'video' case")
+
+        XCTAssertTrue(generatedCode.contains("if let contentProto = proto.content {"), "The message's proto initializer should read the raw oneof value from the proto")
+        XCTAssertTrue(generatedCode.contains("if let content = AppMultimediaSlide.OneOf_Content(proto: contentProto) {"), "The message's proto initializer should convert the raw oneof value using the generated enum's initializer")
+    }
+
+    /// Declaring the oneof enum at the top level by concatenating the message and
+    /// oneof names could collide with a separate message of that same concatenated
+    /// name — `message Foo { oneof bar {...} }` alongside `message FooBar` would both
+    /// want to be `AppFooBar`. Nesting the enum inside its owning message keeps the
+    /// two namespaces distinct.
+    func testOneofTypeDoesNotCollideWithSimilarlyNamedMessage() {
+        let fooMessage = ProtoMessage(
+            name: "Foo",
+            fields: [],
+            parentName: nil,
+            oneofs: [
+                ProtoOneof(
+                    name: "bar",
+                    fields: [
+                        ProtoField(
+                            swiftPrefix: "App",
+                            name: "value",
+                            type: "string",
+                            comment: nil,
+                            isOptional: false,
+                            isRepeated: false,
+                            isMap: false,
+                            isDeprecated: false
+                        )
+                    ]
+                )
+            ]
+        )
+
+        let fooBarMessage = ProtoMessage(
+            name: "FooBar",
+            fields: [
+                ProtoField(
+                    swiftPrefix: "App",
+                    name: "name",
+                    type: "string",
+                    comment: nil,
+                    isOptional: false,
+                    isRepeated: false,
+                    isMap: false,
+                    isDeprecated: false
+                )
+            ],
+            parentName: nil
+        )
+
+        let generatedCode = generateSwiftCode(
+            from: [fooMessage, fooBarMessage],
+            enums: [],
+            with: "App",
+            includeProto: true,
+            includeLocalIDFor: nil,
+            includeBackingData: false,
+            with: "Proto"
+        )
+
+        XCTAssertTrue(generatedCode.contains("public struct AppFooBar: Hashable, Equatable, Sendable {"), "The 'FooBar' message should still generate its struct")
+        XCTAssertFalse(generatedCode.contains("public enum AppFooBar"), "The oneof enum must not be declared as a top-level 'AppFooBar', which would redeclare the 'FooBar' struct")
+        XCTAssertTrue(generatedCode.contains("public enum OneOf_Bar: Hashable, Equatable, Sendable {"), "The oneof enum should be nested and namespaced by its owning message")
+        XCTAssertTrue(generatedCode.contains("public let bar: AppFoo.OneOf_Bar?"), "The oneof property should reference the nested enum type")
+    }
+
+    /// Protobuf's integer scalars are surfaced by SwiftProtobuf as fixed-width types
+    /// (`Int32`/`UInt32`/`Int64`/`UInt64`), so they need converting to the `Int`/`UInt`
+    /// the generated case declares. A substring check for "int" both misses types like
+    /// `fixed32` and wrongly matches message types such as `Point`.
+    func testOneofIntegerPayloadsConvertToDeclaredType() {
+        let valuesMessage = ProtoMessage(
+            name: "Values",
+            fields: [],
+            parentName: nil,
+            oneofs: [
+                ProtoOneof(
+                    name: "value",
+                    fields: [
+                        ProtoField(
+                            swiftPrefix: "App",
+                            name: "signed",
+                            type: "int32",
+                            comment: nil,
+                            isOptional: false,
+                            isRepeated: false,
+                            isMap: false,
+                            isDeprecated: false
+                        ),
+                        ProtoField(
+                            swiftPrefix: "App",
+                            name: "unsigned",
+                            type: "uint64",
+                            comment: nil,
+                            isOptional: false,
+                            isRepeated: false,
+                            isMap: false,
+                            isDeprecated: false
+                        ),
+                        ProtoField(
+                            swiftPrefix: "App",
+                            name: "fixed",
+                            type: "fixed32",
+                            comment: nil,
+                            isOptional: false,
+                            isRepeated: false,
+                            isMap: false,
+                            isDeprecated: false
+                        ),
+                        ProtoField(
+                            swiftPrefix: "App",
+                            name: "point",
+                            type: "Point",
+                            comment: nil,
+                            isOptional: false,
+                            isRepeated: false,
+                            isMap: false,
+                            isDeprecated: false
+                        )
+                    ]
+                )
+            ]
+        )
+
+        let pointMessage = ProtoMessage(
+            name: "Point",
+            fields: [],
+            parentName: nil
+        )
+
+        let generatedCode = generateSwiftCode(
+            from: [valuesMessage, pointMessage],
+            enums: [],
+            with: "App",
+            includeProto: true,
+            includeLocalIDFor: nil,
+            includeBackingData: false,
+            with: "Proto"
+        )
+
+        XCTAssertTrue(generatedCode.contains("indirect case signed(Int)"), "'int32' should surface as 'Int'")
+        XCTAssertTrue(generatedCode.contains("indirect case unsigned(UInt)"), "'uint64' should surface as 'UInt'")
+        XCTAssertTrue(generatedCode.contains("indirect case fixed(UInt)"), "'fixed32' should surface as 'UInt'")
+
+        XCTAssertTrue(generatedCode.contains("if let converted = Int(exactly: value) {"), "'int32' should convert to the declared 'Int' type")
+        XCTAssertTrue(generatedCode.contains("if let converted = UInt(exactly: value) {"), "Unsigned types should convert to the declared 'UInt' type, not 'Int'")
+        XCTAssertFalse(generatedCode.contains("Int(exactly: value)!"), "Integer conversion should not force-unwrap, which traps on out-of-range values")
+
+        XCTAssertTrue(
+            generatedCode.contains("if let converted = AppPoint(proto: value) as AppPoint? {"),
+            "A message type whose name merely contains 'int' (e.g. 'Point') must not be treated as an integer"
+        )
+    }
 }
