@@ -21,48 +21,6 @@ internal func parseProtoFile(
     )
 }
 
-/// Extracts every balanced `keyword Name { ... }` block matching `pattern`, handing
-/// each one's name and body to `handler`, and returns the text with those blocks
-/// removed.
-///
-/// Shared by messages, enums and oneofs so they all gain the same brace balancing
-/// and comment/string awareness.
-///
-/// - Parameters:
-///   - text: The text to extract blocks from.
-///   - pattern: A header pattern of the form `keyword\s+(\w+)\s*\{`.
-///   - handler: Called with each block's name and body.
-/// - Returns: `text` with the matched blocks removed.
-internal func extractBlocks(
-    from text: String,
-    matching pattern: Regex<(Substring, Substring)>,
-    handler: (String, String) -> Void
-) -> String {
-    var remaining = Substring(text)
-    var retained = ""
-
-    while let header = findDeclarationHeader(in: remaining, matching: pattern) {
-        retained += remaining[remaining.startIndex..<header.start]
-
-        guard let closeBrace = findMatchingClosingBrace(
-            in: remaining,
-            startingAtOpenBrace: header.openBrace
-        ) else {
-            // Unbalanced braces: keep the rest verbatim rather than dropping it.
-            retained += remaining[header.start...]
-            remaining = ""
-            break
-        }
-
-        let bodyStart = remaining.index(after: header.openBrace)
-        handler(header.name, String(remaining[bodyStart..<closeBrace]))
-
-        remaining = remaining[remaining.index(after: closeBrace)...]
-    }
-
-    return retained + remaining
-}
-
 /// Recursively parses the content of a protocol buffer file.
 ///
 /// - Parameters:
@@ -80,13 +38,17 @@ internal func parseContent(
     var localMessages: [ProtoMessage] = []
     var localEnums: [ProtoEnum] = []
 
-    // Parsing messages. Blocks are extracted by scanning for a balanced closing
-    // brace so that nesting, single-line declarations and CRLF line endings are all
-    // handled — a regex that stops at the first `\n}` handles none of them.
-    content = extractBlocks(from: content, matching: messageHeaderPattern) { name, body in
-        var messageBody = body
+    // Parsing messages
+    let messageMatches = content.matches(of: messagePattern)
+    for match in messageMatches {
+
+        let messageName = String(match.1)
+        var messageBody = String(match.2)
+
+        // This will recessively call parse content on the
+        // body to find nested messages and enums
         processMessage(
-            name,
+            messageName,
             &messageBody,
             &localMessages,
             &localEnums,
@@ -95,13 +57,25 @@ internal func parseContent(
             verbose: verbose,
             quite: quite
         )
+
+        // Remove the parsed content to avoid duplication
+        content = content.replacingOccurrences(
+            of: String(match.0),
+            with: ""
+        )
     }
 
     // Parsing enums
-    content = extractBlocks(from: content, matching: enumHeaderPattern) { name, body in
-        var enumBody = body
+    let enumMatches = content.matches(of: enumPattern)
+    for match in enumMatches {
+
+        let enumName = String(match.1)
+        var enumBody = String(match.2)
+
+        // This will recessively call parse content on the
+        // body to find nested messages and enums
         processEnum(
-            name,
+            enumName,
             &enumBody,
             &localMessages,
             &localEnums,
@@ -109,6 +83,12 @@ internal func parseContent(
             swiftPrefix,
             verbose: verbose,
             quite: quite
+        )
+
+        // Remove the parsed content to avoid duplication
+        content = content.replacingOccurrences(
+            of: String(match.0),
+            with: ""
         )
     }
 
@@ -249,7 +229,7 @@ internal func parseOneofs(
     var remaining = Substring(body)
     var retained = ""
 
-    while let header = findDeclarationHeader(in: remaining, matching: oneofHeaderPattern) {
+    while let header = findOneofHeader(in: remaining) {
         let oneofName = header.name
 
         // Anything before the `oneof` keyword is an ordinary part of the message.
@@ -306,19 +286,15 @@ internal func parseOneofs(
     return oneofs
 }
 
-/// Locates the next declaration header matching `pattern` that appears in actual
-/// code, skipping any that occur inside comments or string literals — a
-/// commented-out `// Example: oneof ignored {}` must not be treated as a real
-/// declaration.
+/// Locates the next `oneof` header that appears in actual code, skipping any that
+/// occur inside comments or string literals — a commented-out
+/// `// Example: oneof ignored {}` must not produce a phantom oneof.
 ///
-/// - Parameters:
-///   - text: The text to search.
-///   - pattern: A header pattern of the form `keyword\s+(\w+)\s*\{`.
+/// - Parameter text: The text to search.
 /// - Returns: The index the header starts at, the index of its opening brace, and
-///   the declared name; or `nil` if no header is found.
-internal func findDeclarationHeader(
-    in text: Substring,
-    matching pattern: Regex<(Substring, Substring)>
+///   the oneof's name; or `nil` if no header is found.
+internal func findOneofHeader(
+    in text: Substring
 ) -> (start: Substring.Index, openBrace: Substring.Index, name: String)? {
     var index = text.startIndex
     var inLineComment = false
@@ -355,8 +331,8 @@ internal func findDeclarationHeader(
             index = nextIndex
         } else if character == "\"" || character == "'" {
             stringDelimiter = character
-        } else if character.isLetter, isWordStart(at: index, in: text) {
-            if let match = text[index...].prefixMatch(of: pattern) {
+        } else if character == "o", isWordStart(at: index, in: text) {
+            if let match = text[index...].prefixMatch(of: oneofHeaderPattern) {
                 // The header match ends immediately after the opening brace.
                 let openBrace = text.index(before: match.range.upperBound)
                 return (index, openBrace, String(match.1))
@@ -467,78 +443,6 @@ internal func findMatchingClosingBrace(
     return nil
 }
 
-/// Returns `text` with line comments and ordinary block comments blanked out, so
-/// declarations that are commented out aren't parsed as real ones.
-///
-/// `/** ... */` doc comments are preserved, because the field parser captures them
-/// as documentation for the field that follows. Newlines inside removed comments are
-/// kept so line structure is unchanged.
-///
-/// - Parameter text: The text to strip comments from.
-/// - Returns: The text with non-doc comments removed.
-internal func strippingNonDocComments(_ text: String) -> String {
-    var result = ""
-    var index = text.startIndex
-    var stringDelimiter: Character?
-
-    while index < text.endIndex {
-        let character = text[index]
-        let nextIndex = text.index(after: index)
-        let nextCharacter = nextIndex < text.endIndex ? text[nextIndex] : nil
-
-        if let delimiter = stringDelimiter {
-            result.append(character)
-            if character == "\\", let escaped = nextCharacter {
-                result.append(escaped)
-                index = text.index(after: nextIndex)
-                continue
-            }
-            if character == delimiter {
-                stringDelimiter = nil
-            }
-        } else if character == "\"" || character == "'" {
-            stringDelimiter = character
-            result.append(character)
-        } else if character == "/", nextCharacter == "/" {
-            // Skip to the end of the line, keeping the newline itself.
-            index = nextIndex
-            while index < text.endIndex, !text[index].isNewline {
-                index = text.index(after: index)
-            }
-            continue
-        } else if character == "/", nextCharacter == "*" {
-            let afterSlashStar = text.index(after: nextIndex)
-            let isDocComment = afterSlashStar < text.endIndex && text[afterSlashStar] == "*"
-
-            if isDocComment {
-                result.append(character)
-            } else {
-                // Drop the comment, preserving any newlines it spanned.
-                var scan = afterSlashStar
-                while scan < text.endIndex {
-                    if text[scan] == "*", text.index(after: scan) < text.endIndex,
-                       text[text.index(after: scan)] == "/" {
-                        scan = text.index(scan, offsetBy: 2)
-                        break
-                    }
-                    if text[scan].isNewline {
-                        result.append(text[scan])
-                    }
-                    scan = text.index(after: scan)
-                }
-                index = scan
-                continue
-            }
-        } else {
-            result.append(character)
-        }
-
-        index = nextIndex
-    }
-
-    return result
-}
-
 /// Parses the fields of a protocol buffer message.
 ///
 /// - Parameter content: The content of the message.
@@ -550,10 +454,6 @@ internal func parseMessageFields(
     quite: Bool
 ) -> [ProtoField] {
     var fields: [ProtoField] = []
-
-    // Ignore anything that's been commented out, so a commented-out field isn't
-    // generated as a real property.
-    let content = strippingNonDocComments(content)
 
     // Use Swift's Regex for parsing fields
     let fieldMatches = content.matches(of: fieldPattern)
@@ -570,11 +470,7 @@ internal func parseMessageFields(
         let isOptional = fieldModifier?.contains("optional") == true
         let isRepeated = fieldModifier?.contains("repeated") == true
         let isMap = fieldModifier?.starts(with: "map") == true
-        // Blank out string values first, so text inside e.g.
-        // `[json_name = "not deprecated = true"]` isn't read as a real option.
-        let isDeprecated = fieldOptions
-            .map { $0.replacing(stringLiteralPattern, with: "\"\"") }?
-            .contains(deprecatedOptionPattern) == true
+        let isDeprecated = fieldOptions?.contains("deprecated = true") == true
         if verbose {
             print("Matched field type: \(fieldType), field name: \(fieldName), isOptional: \(isOptional), isRepeated: \(isRepeated), isMap: \(isMap))")
         }
@@ -605,9 +501,6 @@ internal func parseEnumCases(
     quite: Bool
 ) -> [ProtoEnumCase] {
     var cases: [ProtoEnumCase] = []
-
-    // Ignore commented-out cases.
-    let content = strippingNonDocComments(content)
 
     // Use Swift's Regex for parsing enum cases
     let caseMatches = content.matches(of: enumCasePattern)
