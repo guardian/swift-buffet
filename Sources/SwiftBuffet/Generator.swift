@@ -225,7 +225,7 @@ internal func writeOneofEnum(
 
     output += "public enum \(typeName): Hashable, Equatable, Sendable {\n"
     for field in oneof.fields {
-        output += "    case \(field.caseCorrectName)(\(field.caseCorrectedBaseType))\n"
+        output += "    indirect case \(field.caseCorrectName)(\(field.caseCorrectedBaseType))\n"
     }
 
     if includeProto {
