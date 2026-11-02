@@ -38,17 +38,13 @@ internal func parseContent(
     var localMessages: [ProtoMessage] = []
     var localEnums: [ProtoEnum] = []
 
-    // Parsing messages
-    let messageMatches = content.matches(of: messagePattern)
-    for match in messageMatches {
-
-        let messageName = String(match.1)
-        var messageBody = String(match.2)
+    while let declaration = findDeclaration(in: content[...], kind: .message) {
+        var messageBody = declaration.body
 
         // This will recessively call parse content on the
         // body to find nested messages and enums
         processMessage(
-            messageName,
+            declaration.name,
             &messageBody,
             &localMessages,
             &localEnums,
@@ -59,23 +55,17 @@ internal func parseContent(
         )
 
         // Remove the parsed content to avoid duplication
-        content = content.replacingOccurrences(
-            of: String(match.0),
-            with: ""
-        )
+        content.removeSubrange(declaration.range)
     }
 
     // Parsing enums
-    let enumMatches = content.matches(of: enumPattern)
-    for match in enumMatches {
-
-        let enumName = String(match.1)
-        var enumBody = String(match.2)
+    while let declaration = findDeclaration(in: content[...], kind: .enumeration) {
+        var enumBody = declaration.body
 
         // This will recessively call parse content on the
         // body to find nested messages and enums
         processEnum(
-            enumName,
+            declaration.name,
             &enumBody,
             &localMessages,
             &localEnums,
@@ -86,13 +76,97 @@ internal func parseContent(
         )
 
         // Remove the parsed content to avoid duplication
-        content = content.replacingOccurrences(
-            of: String(match.0),
-            with: ""
-        )
+        content.removeSubrange(declaration.range)
     }
 
     return (localMessages, localEnums)
+}
+
+/// The protocol buffer declaration type for a balanced declaration scan.
+private enum DeclarationKind {
+    case message
+    case enumeration
+}
+
+/// Finds the next complete message or enum declaration using balanced-brace scanning.
+/// Both the header scan and brace scan ignore comments and string literals, preventing
+/// nested blocks, comments, strings, or aggregate options from truncating a declaration.
+///
+/// - Parameters:
+///   - text: The protocol buffer source to scan.
+///   - kind: Whether to find a message or enum declaration.
+/// - Returns: The declaration name, its body between the outer braces, and the range
+///   of the entire declaration for removal from the source; otherwise, `nil` if no
+///   complete matching declaration is found.
+private func findDeclaration(
+    in text: Substring,
+    kind: DeclarationKind
+) -> (name: String, body: String, range: Range<Substring.Index>)? {
+    var index = text.startIndex
+    var inLineComment = false
+    var inBlockComment = false
+    var stringDelimiter: Character?
+
+    while index < text.endIndex {
+        let character = text[index]
+        let nextIndex = text.index(after: index)
+        let nextCharacter = nextIndex < text.endIndex ? text[nextIndex] : nil
+
+        if inLineComment {
+            if character.isNewline {
+                inLineComment = false
+            }
+        } else if inBlockComment {
+            if character == "*", nextCharacter == "/" {
+                inBlockComment = false
+                index = nextIndex
+            }
+        } else if let delimiter = stringDelimiter {
+            if character == "\\", nextCharacter != nil {
+                index = nextIndex
+            } else if character == delimiter {
+                stringDelimiter = nil
+            }
+        } else if character == "/", nextCharacter == "/" {
+            inLineComment = true
+            index = nextIndex
+        } else if character == "/", nextCharacter == "*" {
+            inBlockComment = true
+            index = nextIndex
+        } else if character == "\"" || character == "'" {
+            stringDelimiter = character
+        } else if isWordStart(at: index, in: text) {
+            let header: (name: String, openBrace: Substring.Index)?
+            switch kind {
+            case .message:
+                if character == "m", let match = text[index...].prefixMatch(of: messageHeaderPattern) {
+                    header = (String(match.1), text.index(before: match.range.upperBound))
+                } else {
+                    header = nil
+                }
+            case .enumeration:
+                if character == "e", let match = text[index...].prefixMatch(of: enumHeaderPattern) {
+                    header = (String(match.1), text.index(before: match.range.upperBound))
+                } else {
+                    header = nil
+                }
+            }
+
+            if let header,
+               let closeBrace = findMatchingClosingBrace(in: text, startingAtOpenBrace: header.openBrace) {
+                let bodyStart = text.index(after: header.openBrace)
+                return (
+                    header.name,
+                    String(text[bodyStart..<closeBrace]),
+                    index..<text.index(after: closeBrace)
+                )
+            }
+        }
+
+        index = text.index(after: index)
+    }
+
+    return nil
 }
 
 /// Processes a protocol buffer enum by parsing its content and extracting nested messages and enums.
