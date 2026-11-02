@@ -125,6 +125,8 @@ final class ParserTests: XCTestCase {
         XCTAssertEqual(messages.first { $0.name == "Layout" }?.parentName, "Sponsor")
         XCTAssertEqual(enums.first { $0.name == "LabelPosition" }?.parentName, "Layout")
         XCTAssertEqual(enums.first { $0.name == "LabelPosition" }?.cases.count, 2)
+        XCTAssertEqual(messages.first { $0.name == "Layout" }?.protoFullName, "Sponsor.Layout")
+        XCTAssertEqual(enums.first { $0.name == "LabelPosition" }?.protoFullName, "Sponsor.Layout.LabelPosition")
     }
 
     func testParseMixedNestedMessageAndEnum() throws {

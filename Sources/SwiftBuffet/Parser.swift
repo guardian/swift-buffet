@@ -30,6 +30,7 @@ internal func parseProtoFile(
 internal func parseContent(
     _ content: inout String,
     parent: String?,
+    nestingPath: [String] = [],
     with swiftPrefix: String,
     verbose: Bool,
     quite: Bool
@@ -49,6 +50,7 @@ internal func parseContent(
             &localMessages,
             &localEnums,
             parent,
+            nestingPath,
             swiftPrefix,
             verbose: verbose,
             quite: quite
@@ -70,6 +72,7 @@ internal func parseContent(
             &localMessages,
             &localEnums,
             parent,
+            nestingPath,
             swiftPrefix,
             verbose: verbose,
             quite: quite
@@ -183,6 +186,7 @@ internal func processEnum(
     _ localMessages: inout [ProtoMessage],
     _ localEnums: inout [ProtoEnum],
     _ parent: String?,
+    _ nestingPath: [String],
     _ prefix: String,
     verbose: Bool,
     quite: Bool
@@ -196,6 +200,7 @@ internal func processEnum(
     let (nestedMessages, nestedEnums) = parseContent(
         &body,
         parent: name,
+        nestingPath: nestingPath + [name],
         with: prefix,
         verbose: verbose,
         quite: quite
@@ -214,7 +219,8 @@ internal func processEnum(
         ProtoEnum(
             name: name,
             cases: cases,
-            parentName: parent
+            parentName: parent,
+            nestingPath: nestingPath
         )
     )
 }
@@ -233,6 +239,7 @@ internal func processMessage(
     _ localMessages: inout [ProtoMessage],
     _ localEnums: inout [ProtoEnum],
     _ parent: String?,
+    _ nestingPath: [String],
     _ prefix: String,
     verbose: Bool,
     quite: Bool
@@ -247,6 +254,7 @@ internal func processMessage(
     let (nestedMessages, nestedEnums) = parseContent(
         &body,
         parent: name,
+        nestingPath: nestingPath + [name],
         with: prefix,
         verbose: verbose,
         quite: quite
@@ -274,7 +282,8 @@ internal func processMessage(
             name: name,
             fields: fields,
             parentName: parent,
-            oneofs: oneofs
+            oneofs: oneofs,
+            nestingPath: nestingPath
         )
     )
 }

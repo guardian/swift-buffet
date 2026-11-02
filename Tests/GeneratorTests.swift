@@ -2,6 +2,62 @@ import XCTest
 @testable import SwiftBuffet
 
 final class GeneratorTests: XCTestCase {
+    func testGenerateProtoInitializersUseCompleteNestedTypePath() {
+        var content = """
+        message Sponsor {
+          Logo logo = 1;
+          Layout layout = 2;
+
+          message Logo { string url = 1; }
+          message Layout {
+            enum LabelPosition {
+              LABEL_POSITION_UNSPECIFIED = 0;
+              LABEL_POSITION_LEADING = 1;
+            }
+            enum LabelAlignment {
+              LABEL_ALIGNMENT_UNSPECIFIED = 0;
+              LABEL_ALIGNMENT_CENTER = 1;
+            }
+            enum VerticalPlacement {
+              VERTICAL_PLACEMENT_UNSPECIFIED = 0;
+              VERTICAL_PLACEMENT_TOP = 1;
+            }
+            LabelPosition label_position = 1;
+            LabelAlignment label_alignment = 2;
+            VerticalPlacement vertical_placement = 3;
+          }
+        }
+        """
+        let (messages, enums) = parseContent(
+            &content,
+            parent: nil,
+            with: "Blueprint",
+            verbose: false,
+            quite: true
+        )
+
+        let generatedCode = generateSwiftCode(
+            from: messages,
+            enums: enums,
+            with: "Blueprint",
+            includeProto: true,
+            includeLocalIDFor: nil,
+            includeBackingData: false,
+            with: "Proto"
+        )
+
+        XCTAssertTrue(generatedCode.contains("internal init?(proto: ProtoSponsor.Logo)"))
+        XCTAssertTrue(generatedCode.contains("internal init?(proto: ProtoSponsor.Layout)"))
+        XCTAssertTrue(generatedCode.contains("internal init(proto: ProtoSponsor.Layout.LabelPosition)"))
+        XCTAssertTrue(generatedCode.contains("internal init(proto: ProtoSponsor.Layout.LabelAlignment)"))
+        XCTAssertTrue(generatedCode.contains("internal init(proto: ProtoSponsor.Layout.VerticalPlacement)"))
+        XCTAssertTrue(generatedCode.contains("ProtoSponsor.Logo(serializedBytes: data)"))
+        XCTAssertTrue(generatedCode.contains("ProtoSponsor.Layout(serializedBytes: data)"))
+        XCTAssertFalse(generatedCode.contains("internal init?(proto: ProtoLogo)"))
+        XCTAssertFalse(generatedCode.contains("internal init?(proto: ProtoLayout)"))
+        XCTAssertFalse(generatedCode.contains("internal init(proto: ProtoLayout."))
+    }
+
     func testGenerateSimpleMessage() {
         let simpleMessageProtoMessage = ProtoMessage(
             name: "Person",

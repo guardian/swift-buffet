@@ -13,6 +13,13 @@ struct ProtoMessage {
     /// `fields` and generated as a single enum rather than independent optional
     /// properties.
     var oneofs: [ProtoOneof] = []
+    /// The names of all containing declarations, from outermost to innermost.
+    var nestingPath: [String] = []
+
+    /// The SwiftProtobuf type name relative to the configured protobuf prefix.
+    var protoFullName: String {
+        (nestingPath + [name]).joined(separator: ".")
+    }
 
     /// The full name of the message, including parent name if nested.
     var fullName: String {
@@ -148,6 +155,13 @@ struct ProtoEnum {
     let cases: [ProtoEnumCase]
     /// The name of the parent message, if any.
     let parentName: String?
+    /// The names of all containing declarations, from outermost to innermost.
+    var nestingPath: [String] = []
+
+    /// The SwiftProtobuf type name relative to the configured protobuf prefix.
+    var protoFullName: String {
+        (nestingPath + [name]).joined(separator: ".")
+    }
 
     /// The full name of the enum, including parent name if present.
     var fullName: String {
