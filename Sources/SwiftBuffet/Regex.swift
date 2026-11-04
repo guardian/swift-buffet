@@ -1,11 +1,11 @@
 import Foundation
 import RegexBuilder
 
-let messagePattern = 
-#/message\s+(\w+)\s*\{([\s\S]*?)\n\}/#
+let messageHeaderPattern =
+#/message\s+(\w+)\s*\{/#
 
-let enumPattern = 
-#/enum\s+(\w+)\s*\{([\s\S]*?)\n?\}/#
+let enumHeaderPattern =
+#/enum\s+(\w+)\s*\{/#
 
 let oneofHeaderPattern =
 #/oneof\s+(\w+)\s*\{/#

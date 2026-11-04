@@ -118,7 +118,7 @@ internal func writeEnumProtoInit(
     } else {
         ""
     }
-    output += padding + "    internal init(proto: \(protoPrefix)\(protoEnum.fullName)) {\n"
+    output += padding + "    internal init(proto: \(protoPrefix)\(protoEnum.protoFullName)) {\n"
     output += padding + "        if let value = Self(rawValue: proto.rawValue) {\n"
     output += padding + "            self = value\n"
     output += padding + "        } else {\n"
@@ -418,7 +418,7 @@ internal func writeMessageProtoInit(
     with protoPrefix: String
 ) {
     output += "\n    public init?(data: Data) {\n"
-    output += "        if let proto = try? \(protoPrefix)\(message.name)(serializedBytes: data) {\n"
+    output += "        if let proto = try? \(protoPrefix)\(message.protoFullName)(serializedBytes: data) {\n"
     output += "            self.init(proto: proto)\n"
     if includeBackingData {
         output += "            self._backingData = data\n"
@@ -428,7 +428,7 @@ internal func writeMessageProtoInit(
     output += "        }\n"
     output += "    }\n\n"
 
-    output += "    internal init?(proto: \(protoPrefix)\(message.name)) {\n"
+    output += "    internal init?(proto: \(protoPrefix)\(message.protoFullName)) {\n"
     for field in message.fields {
         if field.isOptional {
             output += "        if proto.has\(field.caseCorrectProtoName.capitalizingFirstLetter()) {\n"

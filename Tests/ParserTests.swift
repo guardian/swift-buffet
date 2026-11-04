@@ -76,6 +76,80 @@ final class ParserTests: XCTestCase {
         XCTAssertEqual(addressMessage.fields.count, 3, "Expected 3 fields, but got \(addressMessage.fields.count)")
     }
 
+    func testParseMessageNestedInsideMessage() throws {
+        var content = """
+        message Sponsor {
+          string name = 1;
+          message Logo {
+            string url = 1;
+          }
+        }
+        """
+
+        let (messages, _) = parseContent(&content, parent: nil, with: "MyApp", verbose: false, quite: true)
+        let logo = messages.first { $0.name == "Logo" }
+
+        XCTAssertEqual(logo?.parentName, "Sponsor")
+        XCTAssertEqual(logo?.fields.map(\.name), ["url"])
+        XCTAssertEqual(messages.first { $0.name == "Sponsor" }?.fields.map(\.name), ["name"])
+    }
+
+    func testParseTwoMessagesNestedInsideOneParent() throws {
+        var content = """
+        message Sponsor {
+          message Logo { string url = 1; }
+          message Layout { int32 columns = 1; }
+        }
+        """
+
+        let (messages, _) = parseContent(&content, parent: nil, with: "MyApp", verbose: false, quite: true)
+
+        XCTAssertEqual(messages.first { $0.name == "Logo" }?.parentName, "Sponsor")
+        XCTAssertEqual(messages.first { $0.name == "Layout" }?.parentName, "Sponsor")
+    }
+
+    func testParseEnumInsideNestedMessage() throws {
+        var content = """
+        message Sponsor {
+          message Layout {
+            enum LabelPosition {
+              LABEL_POSITION_UNKNOWN = 0;
+              LABEL_POSITION_TOP = 1;
+            }
+          }
+        }
+        """
+
+        let (messages, enums) = parseContent(&content, parent: nil, with: "MyApp", verbose: false, quite: true)
+
+        XCTAssertEqual(messages.first { $0.name == "Layout" }?.parentName, "Sponsor")
+        XCTAssertEqual(enums.first { $0.name == "LabelPosition" }?.parentName, "Layout")
+        XCTAssertEqual(enums.first { $0.name == "LabelPosition" }?.cases.count, 2)
+        XCTAssertEqual(messages.first { $0.name == "Layout" }?.protoFullName, "Sponsor.Layout")
+        XCTAssertEqual(enums.first { $0.name == "LabelPosition" }?.protoFullName, "Sponsor.Layout.LabelPosition")
+    }
+
+    func testParseMixedNestedMessageAndEnum() throws {
+        var content = """
+        message Sponsor {
+          // These braces must not affect declaration balancing: { }
+          string example = 1 [json_name = "braces { and }"];
+          message Logo {
+            /* An unmatched brace in a comment: { */
+            string url = 1;
+          }
+          enum Style {
+            STYLE_UNKNOWN = 0;
+          }
+        }
+        """
+
+        let (messages, enums) = parseContent(&content, parent: nil, with: "MyApp", verbose: false, quite: true)
+
+        XCTAssertEqual(messages.first { $0.name == "Logo" }?.parentName, "Sponsor")
+        XCTAssertEqual(enums.first { $0.name == "Style" }?.parentName, "Sponsor")
+    }
+
     func testParseNestedEnumAndWellKnownTypes() throws {
         var protoFileContent = """
             syntax = "proto3";
